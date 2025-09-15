@@ -118,8 +118,12 @@ for fold, (train_index, val_index) in enumerate(kf.split(X_raw), 1):
         metrics=['accuracy']
     )
 
-    timestamp = datetime.datetime.now().strftime('%Y%m%d_%H%M%S')
+    # recupera modelo salvo
     checkpoint_filepath = f'models/fold_{fold}_checkpoint.model.keras'
+    # model = load_model(checkpoint_filepath, compile=True)
+
+    initial_epoch = 0
+    # initial_epoch = pd.read_csv('training_log.csv')['epoch'].iloc[-1] # pega a ultima epoch registrada no log
 
     early_stop = EarlyStopping(patience=30, restore_best_weights=True)
     csv_logger = CSVLogger(f'training_log_fold_{fold}.csv')
@@ -138,7 +142,8 @@ for fold, (train_index, val_index) in enumerate(kf.split(X_raw), 1):
         verbose=1,
         validation_data=(X_val, y_val),
         shuffle=True,
-        callbacks=[csv_logger, reduce_lr, model_checkpoint_callback]
+        callbacks=[csv_logger, reduce_lr, model_checkpoint_callback],
+        initial_epoch=initial_epoch
     )
 
     histories.append(history)
@@ -168,6 +173,7 @@ with open('results.txt', 'w') as f:
     for linha in resultados:
         print(linha, file=f)
 
+
 # %% [markdown]
 #  # Gráficos de Acurácia e Loss por Fold
 
@@ -195,11 +201,8 @@ for i, history in enumerate(histories, 1):
 
     plt.tight_layout()
 
+    timestamp = datetime.datetime.now().strftime('%Y%m%d_%H%M%S')
     fig_file_path = f"training_history/img/{timestamp}.png"
     plt.savefig(fig_file_path) # se quiser salvar a imagem, descomentar a linha
 
     plt.show()
-
-
-
-
