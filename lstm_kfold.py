@@ -46,7 +46,7 @@ def save_history(history, timestamp):
 #  # Preparando dados
 
 # %%
-csv_files = glob.glob('/mnt/d/dados_surdos/CSVs/dados_pessoa2_*.csv')
+csv_files = glob.glob('/mnt/d/dados_surdos/CSVs/*.csv')
 
 dfs = []
 for csv_file in csv_files:
@@ -81,7 +81,7 @@ for (word, rep), group in grouped:
 
 # %%
 max_len = max(len(seq) for seq in X_raw)
-N_SPLITS = 10
+N_SPLITS = 5
 
 kf = KFold(n_splits=N_SPLITS, shuffle=True, random_state=seed)
 all_fold_accuracies = []
@@ -107,7 +107,7 @@ for fold, (train_index, val_index) in enumerate(kf.split(X_raw), 1):
 
     model = Sequential()
     model.add(Masking(mask_value=0.0, input_shape=(max_len, 63)))
-    model.add(LSTM(1024))
+    model.add(LSTM(256))
     model.add(Dropout(0.3))
     model.add(Dense(num_classes, activation='softmax'))
 
@@ -134,7 +134,7 @@ for fold, (train_index, val_index) in enumerate(kf.split(X_raw), 1):
     history = model.fit(
         X_train, y_train,
         batch_size=16,
-        epochs=10,
+        epochs=1000,
         verbose=1,
         validation_data=(X_val, y_val),
         shuffle=True,
@@ -152,10 +152,21 @@ for fold, (train_index, val_index) in enumerate(kf.split(X_raw), 1):
 
 
 # %%
-print("\n========== RESULTADOS FINAIS ==========")
+resultados = []
+resultados.append("\n========== RESULTADOS FINAIS ==========")
 for i, (acc, loss) in enumerate(zip(all_fold_accuracies, all_fold_losses), 1):
-    print(f"Fold {i}: Accuracy = {acc:.4f}, Loss = {loss:.4f}")
-print(f"Média de acurácia: {np.mean(all_fold_accuracies):.4f}")
+    resultados.append(f"Fold {i}: Accuracy = {acc:.4f}, Loss = {loss:.4f}")
+media = f"Média de acurácia: {np.mean(all_fold_accuracies):.4f}"
+resultados.append(media)
+
+# printa no terminal
+for linha in resultados:
+    print(linha)
+
+# escreve no arquivo
+with open('results.txt', 'w') as f:
+    for linha in resultados:
+        print(linha, file=f)
 
 # %% [markdown]
 #  # Gráficos de Acurácia e Loss por Fold
@@ -183,6 +194,10 @@ for i, history in enumerate(histories, 1):
     plt.legend()
 
     plt.tight_layout()
+
+    fig_file_path = f"training_history/img/{timestamp}.png"
+    plt.savefig(fig_file_path) # se quiser salvar a imagem, descomentar a linha
+
     plt.show()
 
 
