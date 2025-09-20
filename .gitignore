@@ -3,3 +3,5 @@
 *.keras
 *.csv
 /tcc-pedro-breno
+*.pkl
+*.pt
