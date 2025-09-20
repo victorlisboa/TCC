@@ -46,7 +46,7 @@ def save_history(history, timestamp):
 #  # Preparando dados
 
 # %%
-csv_files = glob.glob('/mnt/d/dados_surdos/CSVs/*.csv')
+csv_files = glob.glob('../CSVs/*.csv')
 
 dfs = []
 for csv_file in csv_files:
@@ -107,7 +107,7 @@ for fold, (train_index, val_index) in enumerate(kf.split(X_raw), 1):
 
     model = Sequential()
     model.add(Masking(mask_value=0.0, input_shape=(max_len, 63)))
-    model.add(LSTM(256))
+    model.add(LSTM(128))
     model.add(Dropout(0.3))
     model.add(Dense(num_classes, activation='softmax'))
 
@@ -120,10 +120,12 @@ for fold, (train_index, val_index) in enumerate(kf.split(X_raw), 1):
 
     # recupera modelo salvo
     checkpoint_filepath = f'models/fold_{fold}_checkpoint.model.keras'
-    # model = load_model(checkpoint_filepath, compile=True)
+    #if os.path.exists(checkpoint_filepath):
+    #    model = load_model(checkpoint_filepath, compile=True)
 
     initial_epoch = 0
-    # initial_epoch = pd.read_csv('training_log.csv')['epoch'].iloc[-1] # pega a ultima epoch registrada no log
+    #if os.path.exists(f'training_log_fold_{fold}.csv'):
+    #    initial_epoch = pd.read_csv(f'training_log_fold_{fold}.csv')['epoch'].iloc[-1] # pega a ultima epoch registrada no log
 
     early_stop = EarlyStopping(patience=30, restore_best_weights=True)
     csv_logger = CSVLogger(f'training_log_fold_{fold}.csv')
@@ -169,7 +171,7 @@ for linha in resultados:
     print(linha)
 
 # escreve no arquivo
-with open('results.txt', 'w') as f:
+with open('results_lstm_kfold.txt', 'w') as f:
     for linha in resultados:
         print(linha, file=f)
 
