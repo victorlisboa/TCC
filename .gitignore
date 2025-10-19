@@ -2,6 +2,6 @@
 .vscode
 *.keras
 *.csv
-/tcc-pedro-breno
 *.pkl
 *.pt
+__pycache__
