@@ -22,6 +22,10 @@ CLASS_TO_INDEX: Dict[str, int] = {c: i for i, c in enumerate(CLASSES)}
 NUM_CLASSES = len(CLASSES)
 
 
+def _expand_path(p: Path) -> Path:
+    return p.expanduser().resolve()
+
+
 def read_labels(csv_path: Path) -> Dict[int, int]:
     mapping: Dict[int, int] = {}
     if not csv_path.exists():
@@ -93,6 +97,7 @@ def pad_batch(seqs: List[np.ndarray], labels: List[np.ndarray]) -> Tuple[np.ndar
 
 
 def stems_from_dir(base_dir: Path) -> List[str]:
+    base_dir = base_dir.expanduser().resolve()
     """Return directory names that have matching CSV files."""
     dirs = {p.name for p in base_dir.iterdir() if p.is_dir()}
     csvs = {p.stem for p in base_dir.glob("*.csv")}
@@ -185,8 +190,8 @@ def setup_devices(device: str) -> None:
 def main():
     # Hardcoded configuration (no CLI args)
     cfg = TrainConfig(
-        data_dir=Path("/mnt/d/videos_alfabeto_cropped/breno"),
-        #data_dir=Path("~/tcc/datasets/videos_alfabeto_cropped/breno"),
+        # data_dir=_expand_path(Path("mnt/d/videos_alfabeto_cropped/breno")),
+        data_dir=_expand_path(Path("~/datasets/videos_alfabeto_cropped/breno")),
         epochs=5,
         batch_size=1,
         seed=42,
@@ -197,6 +202,9 @@ def main():
     np.random.seed(cfg.seed)
     tf.random.set_seed(cfg.seed)
     setup_devices(cfg.device)
+
+    if not cfg.data_dir.exists():
+        raise FileNotFoundError(f"Data directory not found: {cfg.data_dir}")
 
     train_stems, val_stems = split_stems(cfg.data_dir)
     if len(train_stems) == 0:
