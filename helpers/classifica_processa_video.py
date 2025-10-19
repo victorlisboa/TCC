@@ -49,6 +49,8 @@ def process_and_label_video(input_video_path, output_video_path, output_csv_path
             if label == '!':
                 print("\nStopping labeling for this video by user request.")
                 break
+            if label == '.':
+                label = '*'
 
             labeled_rows.append([frame_idx, label])
             print(f"\rFrame {frame_idx}: {label}")
