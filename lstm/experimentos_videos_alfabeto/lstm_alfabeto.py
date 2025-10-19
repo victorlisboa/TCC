@@ -39,20 +39,22 @@ def read_labels(csv_path: Path) -> Dict[int, int]:
     return mapping
 
 
-def read_video_frames_gray256(video_path: Path) -> List[np.ndarray]:
-    cap = cv2.VideoCapture(str(video_path))
-    if not cap.isOpened():
-        raise FileNotFoundError(f"Cannot open video: {video_path}")
+def read_dir_frames_gray256(dir_path: Path) -> List[np.ndarray]:
+    """Read .jpg frames from a directory, sorted, as grayscale 256x256 float32 in [0,1]."""
+    if not dir_path.exists() or not dir_path.is_dir():
+        raise FileNotFoundError(f"Frames directory not found: {dir_path}")
+    jpgs = sorted(dir_path.glob("*.jpg"))
+    if len(jpgs) == 0:
+        raise FileNotFoundError(f"No .jpg frames found in: {dir_path}")
     frames: List[np.ndarray] = []
-    ok, frame = cap.read()
-    while ok:
-        gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
-        if gray.shape != (256, 256):
-            gray = cv2.resize(gray, (256, 256), interpolation=cv2.INTER_AREA)
-        gray = gray.astype(np.float32) / 255.0
-        frames.append(gray)
-        ok, frame = cap.read()
-    cap.release()
+    for img_path in jpgs:
+        img = cv2.imread(str(img_path), cv2.IMREAD_GRAYSCALE)
+        if img is None:
+            continue
+        if img.shape != (256, 256):
+            img = cv2.resize(img, (256, 256), interpolation=cv2.INTER_AREA)
+        img = img.astype(np.float32) / 255.0
+        frames.append(img)
     return frames
 
 
@@ -60,10 +62,11 @@ def load_sequence(base_dir: Path, stem: str) -> Tuple[np.ndarray, np.ndarray]:
     """Returns (X, y) where
     - X: [T, 256, 256, 1] float32 in [0,1]
     - y: [T] int labels (sparse)
+    Frames are read from base_dir/<stem>/*.jpg and labels from base_dir/<stem>.csv
     """
-    video_path = base_dir / f"{stem}.mp4"
+    frames_dir = base_dir / stem
     csv_path = base_dir / f"{stem}.csv"
-    frames = read_video_frames_gray256(video_path)
+    frames = read_dir_frames_gray256(frames_dir)
     labels_map = read_labels(csv_path)
     T = len(frames)
     X = np.stack(frames, axis=0)[..., None]  # [T, 256, 256, 1]
@@ -90,10 +93,19 @@ def pad_batch(seqs: List[np.ndarray], labels: List[np.ndarray]) -> Tuple[np.ndar
 
 
 def stems_from_dir(base_dir: Path) -> List[str]:
-    mp4s = {p.stem for p in base_dir.glob("*.mp4")}
+    """Return directory names that have matching CSV files."""
+    dirs = {p.name for p in base_dir.iterdir() if p.is_dir()}
     csvs = {p.stem for p in base_dir.glob("*.csv")}
-    stems = sorted(list(mp4s & csvs), key=lambda s: (len(s), s))
-    return stems
+    candidates = sorted(list(dirs & csvs), key=lambda s: (len(s), s))
+    numeric = [s for s in candidates if s.isdigit()]
+    if len(numeric) == len(candidates) and len(numeric) > 0:
+        # If all are numeric, ensure ordering and optionally restrict to 1..10 if present
+        ordered = sorted(numeric, key=lambda s: int(s))
+        # If 1..10 exist, keep only those
+        wanted = {str(i) for i in range(1, 11)}
+        subset = [s for s in ordered if s in wanted]
+        return subset if len(subset) > 0 else ordered
+    return candidates
 
 
 def split_stems(base_dir: Path) -> Tuple[List[str], List[str]]:
@@ -174,6 +186,7 @@ def main():
     # Hardcoded configuration (no CLI args)
     cfg = TrainConfig(
         data_dir=Path("/mnt/d/videos_alfabeto_cropped/breno"),
+        #data_dir=Path("~/tcc/datasets/videos_alfabeto_cropped/breno"),
         epochs=5,
         batch_size=1,
         seed=42,
@@ -187,7 +200,7 @@ def main():
 
     train_stems, val_stems = split_stems(cfg.data_dir)
     if len(train_stems) == 0:
-        raise RuntimeError(f"No trainable items in {cfg.data_dir}. Ensure matching .mp4 and .csv exist.")
+        raise RuntimeError(f"No trainable items in {cfg.data_dir}. Expect numbered dirs with .jpg frames and <n>.csv labels.")
 
     model = build_model()
     model.summary()
