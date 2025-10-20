@@ -44,12 +44,13 @@ def read_labels(csv_path: Path) -> Dict[int, int]:
 
 
 def read_dir_frames_gray256(dir_path: Path) -> List[np.ndarray]:
-    """Read .jpg frames from a directory, sorted, as grayscale 256x256 float32 in [0,1]."""
+    """Read frame_*.jpg files from directory, sorted by frame number, as grayscale 256x256 float32 in [0,1]."""
     if not dir_path.exists() or not dir_path.is_dir():
         raise FileNotFoundError(f"Frames directory not found: {dir_path}")
-    jpgs = sorted(dir_path.glob("*.jpg"))
+    # Get all frame_*.jpg files and sort by frame number
+    jpgs = sorted(dir_path.glob("frame_*.jpg"), key=lambda p: int(p.stem.split('_')[1]))
     if len(jpgs) == 0:
-        raise FileNotFoundError(f"No .jpg frames found in: {dir_path}")
+        raise FileNotFoundError(f"No frame_*.jpg files found in: {dir_path}")
     frames: List[np.ndarray] = []
     for img_path in jpgs:
         img = cv2.imread(str(img_path), cv2.IMREAD_GRAYSCALE)
@@ -79,9 +80,7 @@ def load_sequence(base_dir: Path, stem: str) -> Tuple[np.ndarray, np.ndarray]:
 
 
 def pad_batch(seqs: List[np.ndarray], labels: List[np.ndarray]) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
-    """Pad sequences in a batch to the same length and build sample weights mask.
-    Returns (X_pad, y_pad, sw) with shapes [B, T, 256,256,1], [B, T], [B, T].
-    """
+    # Unused in frame-level training; kept for compatibility if needed later
     lengths = [s.shape[0] for s in seqs]
     B = len(seqs)
     T = max(lengths)
@@ -97,40 +96,29 @@ def pad_batch(seqs: List[np.ndarray], labels: List[np.ndarray]) -> Tuple[np.ndar
 
 
 def stems_from_dir(base_dir: Path) -> List[str]:
+    """Return directory names 1-10 that have both directory and CSV file."""
     base_dir = base_dir.expanduser().resolve()
-    """Return directory names that have matching CSV files."""
-    dirs = {p.name for p in base_dir.iterdir() if p.is_dir()}
-    csvs = {p.stem for p in base_dir.glob("*.csv")}
-    candidates = sorted(list(dirs & csvs), key=lambda s: (len(s), s))
-    numeric = [s for s in candidates if s.isdigit()]
-    if len(numeric) == len(candidates) and len(numeric) > 0:
-        # If all are numeric, ensure ordering and optionally restrict to 1..10 if present
-        ordered = sorted(numeric, key=lambda s: int(s))
-        # If 1..10 exist, keep only those
-        wanted = {str(i) for i in range(1, 11)}
-        subset = [s for s in ordered if s in wanted]
-        return subset if len(subset) > 0 else ordered
-    return candidates
+    stems = []
+    for i in range(1, 11):
+        stem = str(i)
+        dir_path = base_dir / stem
+        csv_path = base_dir / f"{stem}.csv"
+        if dir_path.exists() and dir_path.is_dir() and csv_path.exists():
+            stems.append(stem)
+    return stems
 
 
 def split_stems(base_dir: Path) -> Tuple[List[str], List[str]]:
+    """Split directories 1-10: train=1-8, val=9-10."""
     stems = stems_from_dir(base_dir)
-    numeric = [s for s in stems if s.isdigit()]
-    if len(numeric) == len(stems):
-        nums = sorted([int(s) for s in stems])
-        train = [str(n) for n in nums if n <= 8]
-        val = [str(n) for n in nums if n >= 9]
-        return train, val
-    rng = random.Random(42)
-    rng.shuffle(stems)
-    k = max(1, int(0.2 * len(stems)))
-    return stems[k:], stems[:k]
+    train = [str(i) for i in range(1, 8 + 1) if str(i) in stems]
+    val = [str(i) for i in range(9, 10 + 1) if str(i) in stems]
+    return train, val
 
 
 def make_generator(base_dir: Path, stems: List[str], batch_size: int = 1, shuffle: bool = True) -> Iterable:
-    """Python generator yielding (X, y, sample_weight) for Keras fit.
-    - Supports variable sequence lengths with padding (batch_size >= 1).
-    - Uses sparse labels per timestep.
+    """Yield (X_pad, y_pad, sample_weight) batches of sequences with padding.
+    - X_pad: [B, T, 256, 256, 1], y_pad: [B, T], sample_weight: [B, T]
     """
     stems = list(stems)
     while True:
@@ -150,9 +138,8 @@ def make_generator(base_dir: Path, stems: List[str], batch_size: int = 1, shuffl
 
 def build_model() -> tf.keras.Model:
     inp = layers.Input(shape=(None, 256, 256, 1), name="frames")
-    # Use raw images only: flatten each frame and feed to LSTM
-    x = layers.TimeDistributed(layers.Flatten())(inp)  # [B, T, 256*256]
-    # Optional normalization to stabilize training on raw pixel ranges
+    # Raw images only: flatten each frame, then LSTM over time
+    x = layers.TimeDistributed(layers.Flatten())(inp)
     x = layers.LayerNormalization()(x)
     x = layers.LSTM(256, return_sequences=True)(x)
     out = layers.TimeDistributed(layers.Dense(NUM_CLASSES, activation="softmax"))(x)
@@ -174,26 +161,16 @@ class TrainConfig:
     steps_per_epoch: int = 0  # 0 => auto from dataset size
     val_steps: int = 0       # 0 => auto
     seed: int = 42
-    device: str = "auto"  # "cpu" | "gpu" | "auto"
+    device: str = "gpu"  # "cpu" | "gpu" | "auto"
 
-
-def setup_devices(device: str) -> None:
-    if device == "auto":
-        return
-    if device == "cpu":
-        tf.config.set_visible_devices([], "GPU")
-    elif device == "gpu":
-        # leave defaults; error if no GPU will just fallback
-        pass
 
 
 def main():
-    # Hardcoded configuration (no CLI args)
     cfg = TrainConfig(
-        # data_dir=_expand_path(Path("mnt/d/videos_alfabeto_cropped/breno")),
-        data_dir=_expand_path(Path("~/datasets/videos_alfabeto_cropped/breno")),
+        data_dir=Path("/mnt/d/videos_alfabeto_cropped/breno"),
+        # data_dir=_expand_path(Path("~/datasets/videos_alfabeto_cropped/breno")),
         epochs=5,
-        batch_size=1,
+        batch_size=64,
         seed=42,
         device="auto",
     )
@@ -201,23 +178,19 @@ def main():
     random.seed(cfg.seed)
     np.random.seed(cfg.seed)
     tf.random.set_seed(cfg.seed)
-    setup_devices(cfg.device)
 
     if not cfg.data_dir.exists():
-        raise FileNotFoundError(f"Data directory not found: {cfg.data_dir}")
+        raise FileNotFoundError(f"diretório de dados não encontrado: {cfg.data_dir}")
 
     train_stems, val_stems = split_stems(cfg.data_dir)
     if len(train_stems) == 0:
-        raise RuntimeError(f"No trainable items in {cfg.data_dir}. Expect numbered dirs with .jpg frames and <n>.csv labels.")
+        raise RuntimeError(f"No trainable items in {cfg.data_dir}. Expect directories 1-10 with frame_*.jpg files and corresponding CSV labels.")
 
     model = build_model()
     model.summary()
 
     train_gen = make_generator(cfg.data_dir, train_stems, batch_size=cfg.batch_size, shuffle=True)
-    if len(val_stems) > 0:
-        val_gen = make_generator(cfg.data_dir, val_stems, batch_size=cfg.batch_size, shuffle=False)
-    else:
-        val_gen = None
+    val_gen = make_generator(cfg.data_dir, val_stems, batch_size=cfg.batch_size, shuffle=False) if len(val_stems) > 0 else None
 
     steps_per_epoch = math.ceil(len(train_stems) / cfg.batch_size)
     val_steps = math.ceil(len(val_stems) / cfg.batch_size) if len(val_stems) > 0 else None
@@ -247,5 +220,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
-
