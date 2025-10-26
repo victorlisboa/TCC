@@ -11,6 +11,14 @@ import numpy as np
 import tensorflow as tf
 from keras import layers, models, optimizers
 
+CLASSES = [
+    "*",
+    "a", "b", "c", "d", "e", "f", "g", "h", "i", "j", "k", "l", "m",
+    "n", "o", "p", "q", "r", "s", "t", "u", "v", "w", "x", "y", "z",
+]
+CLASS_TO_INDEX: Dict[str, int] = {c: i for i, c in enumerate(CLASSES)}
+NUM_CLASSES = len(CLASSES)
+
 @dataclass
 class TrainConfig:
     data_dir: Path
@@ -22,15 +30,13 @@ class TrainConfig:
     device: str = "gpu"
     checkpoint_dir: str = "./checkpoints"
 
-def build_model() -> tf.keras.Model:
-    inp = layers.Input(shape=(None, 256, 256, 1), name="frames")
-    # Raw images only: flatten each frame, then LSTM over time
-    x = layers.TimeDistributed(layers.Flatten())(inp)
-    x = layers.LayerNormalization()(x)
-    x = layers.LSTM(256, return_sequences=True)(x)
-    out = layers.TimeDistributed(layers.Dense(NUM_CLASSES, activation="softmax"))(x)
-
-    model = models.Model(inputs=inp, outputs=out)
+def build_model() -> tf.keras.Sequential:
+    model = models.Sequential()
+    model.add(layers.TimeDistributed(layers.Flatten(), input_shape=(None, 256, 256, 1)))
+    model.add(layers.Masking(mask_value=0.0))
+    model.add(layers.LSTM(256, return_sequences=True))
+    model.add(layers.TimeDistributed(layers.Dense(NUM_CLASSES, activation="softmax")))
+    
     model.compile(
         optimizer=optimizers.Adam(1e-3),
         loss=tf.keras.losses.SparseCategoricalCrossentropy(),
@@ -67,6 +73,8 @@ def main():
     # if len(train_stems) == 0:
     #     raise RuntimeError(f"No trainable items in {cfg.data_dir}. Expect directories 1-10 with frame_*.jpg files and corresponding CSV labels.")
 
+    
+
     model = build_model()
     model.summary()
 
@@ -97,7 +105,7 @@ def main():
     callbacks = [ckpt_cb, CheckpointCallback()]
 
     history = model.fit(
-        ,
+        True,
         steps_per_epoch=steps_per_epoch,
         epochs=cfg.epochs,
         initial_epoch=start_epoch,
