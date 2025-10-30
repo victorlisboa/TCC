@@ -10,6 +10,7 @@ import cv2
 import numpy as np
 import tensorflow as tf
 from keras import layers, models, optimizers
+import matplotlib.pyplot as plt
 
 CLASSES = [
     "*",
@@ -148,8 +149,8 @@ def main():
     cfg = TrainConfig(
         # data_dir=Path("/home/vitorlisboa/datasets/videos_alfabeto_cropped/breno"),
         data_dir=Path("/mnt/d/videos_alfabeto_cropped/breno"),
-        epochs=100,
-        batch_size=1,
+        epochs=3,
+        batch_size=6,
         seed=42,
         checkpoint_dir="./checkpoints",
         split_ratios=(0.6, 0.2, 0.2) # 60% treino, 20% val, 20% teste
@@ -285,6 +286,33 @@ def main():
     print("Avaliando o MELHOR modelo (baseado em val_loss) no conjunto de teste...")
     best_model_results = best_model.evaluate(test_dataset, steps=test_steps, verbose=1)
     print(f"Resultados (Melhor Modelo): Loss={best_model_results[0]:.4f}, Accuracy={best_model_results[1]:.4f}")
+
+    # Plotagem dos gráficos de treinamento
+    plt.figure(figsize=(12, 4))
+    
+    # Gráfico de Loss
+    plt.subplot(1, 2, 1)
+    plt.plot(history.history['loss'], label='Treino')
+    plt.plot(history.history['val_loss'], label='Validação')
+    plt.title('Modelo Loss')
+    plt.xlabel('Época')
+    plt.ylabel('Loss')
+    plt.legend()
+    
+    # Gráfico de Acurácia
+    plt.subplot(1, 2, 2)
+    plt.plot(history.history['acc'], label='Treino')
+    plt.plot(history.history['val_acc'], label='Validação')
+    plt.title('Modelo Acurácia')
+    plt.xlabel('Época')
+    plt.ylabel('Acurácia')
+    plt.legend()
+    
+    plt.tight_layout()
+    plt.savefig('training_history.png')
+    plt.close()
+    
+    print("Gráficos de treinamento salvos em 'training_history.png'")
 
 
 if __name__ == "__main__":
