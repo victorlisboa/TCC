@@ -147,10 +147,10 @@ def create_dataset(
 
 def main():
     cfg = TrainConfig(
-        # data_dir=Path("/home/vitorlisboa/datasets/videos_alfabeto_cropped/breno"),
-        data_dir=Path("/mnt/d/videos_alfabeto_cropped/breno"),
-        epochs=3,
-        batch_size=6,
+        data_dir=Path("/home/vitorlisboa/datasets/videos_alfabeto_cropped/breno"),
+        # data_dir=Path("/mnt/d/videos_alfabeto_cropped/breno"),
+        epochs=500,
+        batch_size=1,
         seed=42,
         checkpoint_dir="./checkpoints",
         split_ratios=(0.6, 0.2, 0.2) # 60% treino, 20% val, 20% teste
