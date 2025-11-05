@@ -14,21 +14,24 @@ import matplotlib.pyplot as plt
 
 CLASSES = [
     "*",
-    "a", "b", "c", "d", "e",]# "f", "g", "h", "i", "j", "k", "l", "m",
-    # "n", "o", "p", "q", "r", "s", "t", "u", "v", "w", "x", "y", "z",
-# ]
+    "a", "b", "c", "d", "e", "f", "g", "h", "i", "j", "k", "l", "m",
+    "n", "o", "p", "q", "r", "s", "t", "u", "v", "w", "x", "y", "z",
+]
+
 CLASS_TO_INDEX: Dict[str, int] = {c: i for i, c in enumerate(CLASSES)}
 NUM_CLASSES = len(CLASSES)
 
 @dataclass
 class TrainConfig:
     data_dir: Path
-    epochs: int = 5
-    batch_size: int = 1
-    seed: int = 42
-    device: str = "gpu"
-    checkpoint_dir: str = "./checkpoints"
-    split_ratios: Tuple[float, float, float] = (0.6, 0.2, 0.2)
+    epochs: int
+    batch_size: int
+    sequence_length: int
+    patience: int
+    seed: int 
+    device: str
+    checkpoint_dir: str
+    split_ratios: Tuple[float, float, float]
 
 def build_model() -> tf.keras.Sequential:
     model = models.Sequential()
@@ -148,10 +151,12 @@ def create_dataset(
 def main():
     cfg = TrainConfig(
         data_dir=Path("/home/vitorlisboa/datasets/videos_alfabeto_cropped/breno"),
-        # data_dir=Path("/mnt/d/videos_alfabeto_cropped/breno"),
         epochs=500,
-        batch_size=1,
+        batch_size=2,
+        sequence_length=32,
+        patience=20,
         seed=42,
+        device="auto",
         checkpoint_dir="./checkpoints",
         split_ratios=(0.6, 0.2, 0.2) # 60% treino, 20% val, 20% teste
     )
@@ -168,8 +173,10 @@ def main():
     if gpus: print('GPUs encontradas:\n', gpus)
     else: print('Nenhuma GPU encontrada')
     
-    model = build_model()
-    model.summary()
+    strategy = tf.distribute.MirroredStrategy()
+    with strategy.scope():
+        model = build_model()
+        model.summary()
 
     optimizer = model.optimizer
 
@@ -248,8 +255,13 @@ def main():
     )
 
     callbacks = [
-        CheckpointCallback(),  # Para resumir o treino
-        save_best_callback     # Para salvar o melhor modelo
+        CheckpointCallback(),
+        save_best_callback,
+        tf.keras.callbacks.EarlyStopping(
+            monitor='val_loss',
+            patience=cfg.patience,
+            restore_best_weights=True
+        )
     ]
 
     # treinamento
