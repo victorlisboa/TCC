@@ -458,7 +458,7 @@ def main():
         patience=20,
         seed=42,
         device="auto",
-        checkpoint_dir=f"./checkpoints_32_256",
+        checkpoint_dir=f"./checkpoints_dense_32_256",
         split_ratios=(0.6, 0.2, 0.2)
     )
 

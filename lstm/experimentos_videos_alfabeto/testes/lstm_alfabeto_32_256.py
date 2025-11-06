@@ -429,7 +429,7 @@ def evaluate_and_save(
         f.write(f"Accuracy: {best_model_results[1]:.4f}\n")
 
     # Plotagem
-    plot_training_history(history)
+    plot_training_history(history, cfg)
 
 
 def main():
