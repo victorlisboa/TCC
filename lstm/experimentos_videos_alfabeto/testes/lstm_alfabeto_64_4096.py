@@ -366,7 +366,7 @@ def create_callbacks(cfg: TrainConfig, manager: tf.train.CheckpointManager) -> L
 
     return [CheckpointCallback(), save_best_callback, early_stopping_callback]
 
-def plot_training_history(history):
+def plot_training_history(history, cfg):
     """Salva os gráficos de perda e acurácia do treinamento."""
     plt.figure(figsize=(12, 4))
     
@@ -387,7 +387,7 @@ def plot_training_history(history):
     plt.legend()
     
     plt.tight_layout()
-    plt.savefig('training_history.png')
+    plt.savefig(f'training_history_{cfg.image_height}x{cfg.image_width}_{cfg.lstm_units}.png')
     plt.close()
     
     print("Gráficos de treinamento salvos em 'training_history.png'")
@@ -429,7 +429,7 @@ def evaluate_and_save(
         f.write(f"Accuracy: {best_model_results[1]:.4f}\n")
 
     # Plotagem
-    plot_training_history(history)
+    plot_training_history(history, cfg)
 
 
 def main():
