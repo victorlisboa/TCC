@@ -390,7 +390,7 @@ def plot_training_history(history, cfg):
     plt.savefig(f'training_history_{cfg.image_height}x{cfg.image_width}_{cfg.lstm_units}.png')
     plt.close()
     
-    print("Gráficos de treinamento salvos em 'training_history.png'")
+    print(f"Gráficos de treinamento salvos em 'training_history_{cfg.image_height}x{cfg.image_width}_{cfg.lstm_units}.png'")
 
 def evaluate_and_save(
     model: tf.keras.Model, 
