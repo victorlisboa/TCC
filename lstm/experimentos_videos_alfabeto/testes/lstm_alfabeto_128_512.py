@@ -444,7 +444,7 @@ def main():
         image_height=128,
         image_width=128,
         lstm_units=512,
-        patience=20,
+        patience=100,
         seed=42,
         device="auto",
         checkpoint_dir="./checkpoints_128_512",

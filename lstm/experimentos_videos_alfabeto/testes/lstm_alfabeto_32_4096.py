@@ -444,7 +444,7 @@ def main():
         image_height=32,
         image_width=32,
         lstm_units=4096,
-        patience=20,
+        patience=100,
         seed=42,
         device="auto",
         checkpoint_dir="./checkpoints_32_4096",
