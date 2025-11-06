@@ -441,13 +441,13 @@ def main():
         epochs=500,
         batch_size=2,
         sequence_length=32,
-        image_height=256,
-        image_width=256,
+        image_height=32,
+        image_width=32,
         lstm_units=256,
         patience=20,
         seed=42,
         device="auto",
-        checkpoint_dir=f"./checkpoints_{cfg.image_height}x{cfg.image_width}_{cfg.lstm_units}",
+        checkpoint_dir=f"./checkpoints_32_256",
         split_ratios=(0.6, 0.2, 0.2)
     )
 

@@ -5,3 +5,4 @@
 *.pkl
 *.pt
 __pycache__
+.h5
