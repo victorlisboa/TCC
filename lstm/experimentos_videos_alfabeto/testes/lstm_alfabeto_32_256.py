@@ -347,7 +347,7 @@ def create_callbacks(cfg: TrainConfig, manager: tf.train.CheckpointManager) -> L
                 json.dump({"epoch": epoch}, f)
             print(f"\nCheckpoint salvo: {path}")
 
-    best_model_path = os.path.join(cfg.checkpoint_dir, f"best_model_{cfg.image_height}x{cfg.image_width}_{cfg.lstm_units}.h5")
+    best_model_path = os.path.join(cfg.checkpoint_dir, f"best_model.h5")
     
     save_best_callback = tf.keras.callbacks.ModelCheckpoint(
         filepath=best_model_path,
