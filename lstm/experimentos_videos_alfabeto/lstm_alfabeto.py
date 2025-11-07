@@ -6,9 +6,8 @@ import random
 import csv
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Dict, List, Tuple, Generator
-
-import cv2  # cv2 não é mais usado para carregar imagens, mas mantido por segurança
+from typing import Dict, List, Tuple
+from keras.callbacks import ReduceLROnPlateau
 import matplotlib.pyplot as plt
 import numpy as np
 import tensorflow as tf
@@ -239,11 +238,11 @@ def prepare_datasets(cfg: TrainConfig) -> Tuple[tf.data.Dataset, tf.data.Dataset
     Retorna os datasets de treino, validação e teste, além dos passos por época e pesos padrão.
     """
     
-    # 1. Obter metadados no nível do VÍDEO
+    # obtem metadados no nível do vídeo
     all_video_data = get_video_metadata(cfg.data_dir)
     num_videos = len(all_video_data)
 
-    # 2. Embaralhar e dividir no nível do VÍDEO
+    # embaralha e divide no nível do vídeo
     random.shuffle(all_video_data)
     train_split, val_split, test_split = cfg.split_ratios
     
@@ -266,7 +265,7 @@ def prepare_datasets(cfg: TrainConfig) -> Tuple[tf.data.Dataset, tf.data.Dataset
     if not train_data or not val_data or not test_data:
         raise ValueError("Divisão de dados (vídeos) resultou em um conjunto vazio.")
 
-    # 3. Criação de Sequências (Chunks)
+    # cria de sequências (chunks)
     print(f"Criando sequências (chunks) de {cfg.sequence_length} frames...")
     train_stride = cfg.sequence_length // 2 # gera sobreposição para dados de treino
     val_test_stride = cfg.sequence_length
@@ -285,7 +284,7 @@ def prepare_datasets(cfg: TrainConfig) -> Tuple[tf.data.Dataset, tf.data.Dataset
     if not train_sequences or not val_sequences or not test_sequences:
         raise ValueError("Criação de sequência resultou em um conjunto vazio.")
 
-    # 4. Cálculo de pesos (baseado apenas nos vídeos de TREINO)
+    # cálculo de pesos (baseado apenas nos vídeos de treino)
     print("Calculando pesos das classes (class weights)...")
     all_train_labels = []
     for _, labels in train_data:
@@ -305,7 +304,7 @@ def prepare_datasets(cfg: TrainConfig) -> Tuple[tf.data.Dataset, tf.data.Dataset
     
     default_class_weights = {i: 1.0 for i in class_indices}
 
-    # 5. Criar Datasets
+    # cria datasets
     train_dataset = create_dataset(
         train_sequences, cfg.batch_size, cfg.seed, 
         train_class_weights, cfg.sequence_length,
@@ -325,7 +324,7 @@ def prepare_datasets(cfg: TrainConfig) -> Tuple[tf.data.Dataset, tf.data.Dataset
         is_training=False
     )
     
-    # 6. Calcular Steps
+    # calcula steps
     steps_per_epoch = math.ceil(len(train_sequences) / cfg.batch_size)
     validation_steps = math.ceil(len(val_sequences) / cfg.batch_size)
     test_steps = math.ceil(len(test_sequences) / cfg.batch_size)
@@ -347,7 +346,10 @@ def create_callbacks(cfg: TrainConfig, manager: tf.train.CheckpointManager) -> L
                 json.dump({"epoch": epoch}, f)
             print(f"\nCheckpoint salvo: {path}")
 
-    best_model_path = os.path.join(cfg.checkpoint_dir, f"best_model_{cfg.image_height}x{cfg.image_width}_{cfg.lstm_units}.h5")
+    # salva logs de treino
+    csv_logger_callback = tf.keras.callbacks.CSVLogger(filepath=os.path.join(cfg.checkpoint_dir, "training_log.csv"))
+
+    best_model_path = os.path.join(cfg.checkpoint_dir, f"best_model.h5")
     
     save_best_callback = tf.keras.callbacks.ModelCheckpoint(
         filepath=best_model_path,
@@ -364,9 +366,17 @@ def create_callbacks(cfg: TrainConfig, manager: tf.train.CheckpointManager) -> L
         restore_best_weights=True
     )
 
-    return [CheckpointCallback(), save_best_callback, early_stopping_callback]
+    reduce_lr_callback = ReduceLROnPlateau(
+        monitor='val_loss',
+        factor=0.1,
+        patience=cfg.patience // 2,
+        min_lr=1e-6,
+        verbose=1
+    )
 
-def plot_training_history(history):
+    return [CheckpointCallback(), save_best_callback, early_stopping_callback, reduce_lr_callback, csv_logger_callback]
+
+def plot_training_history(history, cfg):
     """Salva os gráficos de perda e acurácia do treinamento."""
     plt.figure(figsize=(12, 4))
     
@@ -387,10 +397,10 @@ def plot_training_history(history):
     plt.legend()
     
     plt.tight_layout()
-    plt.savefig('training_history.png')
+    plt.savefig(f'training_history_{cfg.image_height}x{cfg.image_width}_{cfg.lstm_units}.png')
     plt.close()
-    
-    print("Gráficos de treinamento salvos em 'training_history.png'")
+
+    print(f"Gráficos de treinamento salvos em 'training_history_{cfg.image_height}x{cfg.image_width}_{cfg.lstm_units}.png'")
 
 def evaluate_and_save(
     model: tf.keras.Model, 
@@ -429,7 +439,7 @@ def evaluate_and_save(
         f.write(f"Accuracy: {best_model_results[1]:.4f}\n")
 
     # Plotagem
-    plot_training_history(history)
+    plot_training_history(history, cfg)
 
 
 def main():
@@ -438,16 +448,16 @@ def main():
     # 1. Configuração
     cfg = TrainConfig(
         data_dir=Path("/home/vitorlisboa/datasets/videos_alfabeto_cropped/breno"),
-        epochs=500,
+        epochs=1000,
         batch_size=2,
         sequence_length=32,
-        image_height=256,
-        image_width=256,
+        image_height=32,
+        image_width=32,
         lstm_units=256,
         patience=20,
         seed=42,
         device="auto",
-        checkpoint_dir="./checkpoints",
+        checkpoint_dir=f"./checkpoints",
         split_ratios=(0.6, 0.2, 0.2)
     )
 
