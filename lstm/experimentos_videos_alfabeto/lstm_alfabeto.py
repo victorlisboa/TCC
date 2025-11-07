@@ -184,8 +184,6 @@ def create_dataset(
     dataset = dataset.prefetch(buffer_size=tf.data.AUTOTUNE)
     return dataset
 
-# --- Novas Funções Auxiliares (Modularização) ---
-
 def setup_environment(cfg: TrainConfig) -> tf.distribute.Strategy:
     """Configura seeds, GPUs e estratégia de distribuição."""
     random.seed(cfg.seed)
@@ -375,7 +373,7 @@ def create_callbacks(cfg: TrainConfig, manager: tf.train.CheckpointManager) -> L
         verbose=1
     )
 
-    return [CheckpointCallback(), save_best_callback, early_stopping_callback, reduce_lr_callback, csv_logger_callback]
+    return [CheckpointCallback(), save_best_callback, early_stopping_callback, csv_logger_callback]
 
 def plot_training_history(history, cfg):
     """Salva os gráficos de perda e acurácia do treinamento."""
@@ -504,6 +502,15 @@ def main():
     lstm_units_list = [256, 512, 1024, 2048, 4096]
     for img_size in img_sizes:
         for lstm_units in lstm_units_list:
+
+            results_filename = f"best_model_results_{img_size}x{img_size}_{lstm_units}.txt"
+            results_file = Path(results_filename)
+            
+            # verifica se o arquivo de resultado já existe
+            if results_file.exists():
+                print(f"\n\nExperimento {img_size}x{img_size}, {lstm_units} LSTM já concluído. Pulando.")
+                continue
+
             print(f"\n\nIniciando experimento com tamanho de imagem {img_size}x{img_size} e {lstm_units} unidades LSTM.\n")
             try:
                 run_experiment(img_size, lstm_units)
