@@ -347,7 +347,7 @@ def create_callbacks(cfg: TrainConfig, manager: tf.train.CheckpointManager) -> L
             print(f"\nCheckpoint salvo: {path}")
 
     # salva logs de treino
-    csv_logger_callback = tf.keras.callbacks.CSVLogger(filepath=os.path.join(cfg.checkpoint_dir, "training_log.csv"))
+    csv_logger_callback = tf.keras.callbacks.CSVLogger(filename=os.path.join(cfg.checkpoint_dir, "training_log.csv"))
 
     best_model_path = os.path.join(cfg.checkpoint_dir, f"best_model.h5")
     
