@@ -180,7 +180,7 @@ def create_dataset(
     )
     
     dataset = dataset.map(load_fn, num_parallel_calls=tf.data.AUTOTUNE)
-    dataset = dataset.batch(batch_size)
+    dataset = dataset.batch(batch_size, drop_remainder=True)
     dataset = dataset.prefetch(buffer_size=tf.data.AUTOTUNE)
     return dataset
 
@@ -324,8 +324,8 @@ def prepare_datasets(cfg: TrainConfig) -> Tuple[tf.data.Dataset, tf.data.Dataset
     
     # calcula steps
     steps_per_epoch = math.ceil(len(train_sequences) / cfg.batch_size)
-    validation_steps = math.ceil(len(val_sequences) / cfg.batch_size)
-    test_steps = math.ceil(len(test_sequences) / cfg.batch_size)
+    validation_steps = len(val_sequences) // cfg.batch_size
+    test_steps = len(test_sequences) // cfg.batch_size
     
     return (
         train_dataset, val_dataset, test_dataset, 
