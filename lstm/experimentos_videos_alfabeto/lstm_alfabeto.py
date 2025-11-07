@@ -445,13 +445,13 @@ def run_experiment(img_size: int, lstm_units: int):
     # 1. Configuração
     cfg = TrainConfig(
         data_dir=Path("/home/vitorlisboa/datasets/videos_alfabeto_cropped/breno"),
-        epochs=50,
+        epochs=500,
         batch_size=2,
         sequence_length=32,
         image_height=img_size,
         image_width=img_size,
         lstm_units=lstm_units,
-        patience=5,
+        patience=20,
         seed=42,
         device="auto",
         checkpoint_dir=f"./checkpoints_{img_size}x{img_size}_{lstm_units}",
@@ -500,8 +500,8 @@ def main():
     
     img_sizes = [32, 64, 128, 256]
     lstm_units_list = [256, 512, 1024, 2048, 4096]
-    for img_size in img_sizes:
-        for lstm_units in lstm_units_list:
+    for lstm_units in lstm_units_list:
+        for img_size in img_sizes:
 
             results_filename = f"best_model_results_{img_size}x{img_size}_{lstm_units}.txt"
             results_file = Path(results_filename)
