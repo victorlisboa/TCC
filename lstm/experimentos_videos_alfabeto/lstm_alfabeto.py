@@ -347,6 +347,7 @@ def create_callbacks(cfg: TrainConfig, manager: tf.train.CheckpointManager) -> L
             print(f"\nCheckpoint salvo: {path}")
 
     # salva logs de treino
+    os.makedirs(cfg.checkpoint_dir, exist_ok=True)  # necessário criar diretório para CSVLogger
     csv_logger_callback = tf.keras.callbacks.CSVLogger(filename=os.path.join(cfg.checkpoint_dir, "training_log.csv"))
 
     best_model_path = os.path.join(cfg.checkpoint_dir, f"best_model.h5")
@@ -369,12 +370,12 @@ def create_callbacks(cfg: TrainConfig, manager: tf.train.CheckpointManager) -> L
     reduce_lr_callback = ReduceLROnPlateau(
         monitor='val_loss',
         factor=0.1,
-        patience=cfg.patience / 5,
+        patience=cfg.patience // 2,
         min_lr=1e-6,
         verbose=1
     )
 
-    return [CheckpointCallback(), save_best_callback, early_stopping_callback, reduce_lr_callback, csv_logger_callback]
+    return [CheckpointCallback(), save_best_callback, early_stopping_callback, csv_logger_callback]
 
 def plot_training_history(history, cfg):
     """Salva os gráficos de perda e acurácia do treinamento."""
@@ -441,23 +442,21 @@ def evaluate_and_save(
     # Plotagem
     plot_training_history(history, cfg)
 
-
-def main():
-    """Função principal que coordena o pipeline de treinamento."""
-    
+def run_experiment(img_size: int, lstm_units: int):
+    """Executa um experimento completo com os parâmetros fornecidos."""
     # 1. Configuração
     cfg = TrainConfig(
         data_dir=Path("/home/vitorlisboa/datasets/videos_alfabeto_cropped/breno"),
-        epochs=1000,
+        epochs=50,
         batch_size=2,
         sequence_length=32,
-        image_height=32,
-        image_width=32,
-        lstm_units=256,
-        patience=25,
+        image_height=img_size,
+        image_width=img_size,
+        lstm_units=lstm_units,
+        patience=5,
         seed=42,
         device="auto",
-        checkpoint_dir=f"./checkpoints",
+        checkpoint_dir=f"./checkpoints_{img_size}x{img_size}_{lstm_units}",
         split_ratios=(0.6, 0.2, 0.2)
     )
 
@@ -498,6 +497,18 @@ def main():
         test_sequences, default_class_weights, cfg
     )
 
+def main():
+    """Função principal que coordena o pipeline de treinamento."""
+    
+    img_sizes = [32, 64, 128, 256]
+    lstm_units_list = [256, 512, 1024, 2048, 4096]
+    for img_size in img_sizes:
+        for lstm_units in lstm_units_list:
+            print(f"\n\nIniciando experimento com tamanho de imagem {img_size}x{img_size} e {lstm_units} unidades LSTM.\n")
+            try:
+                run_experiment(img_size, lstm_units)
+            except Exception as e:
+                print(f"Erro durante o experimento: {e}")
 
 if __name__ == "__main__":
     main()
