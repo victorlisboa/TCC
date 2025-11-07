@@ -502,10 +502,8 @@ def run_experiment(img_size: int, lstm_units: int):
 def main():
     """Função principal que coordena o pipeline de treinamento."""
     
-    # img_sizes = [32, 64, 128, 256]
-    # lstm_units_list = [256, 512, 1024, 2048, 4096]
-    img_sizes = [64]
-    lstm_units_list = [256]
+    img_sizes = [32, 64, 128, 256]
+    lstm_units_list = [256, 512, 1024, 2048, 4096]
     for lstm_units in lstm_units_list:
         for img_size in img_sizes:
 
