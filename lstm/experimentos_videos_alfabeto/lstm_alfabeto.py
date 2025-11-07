@@ -13,6 +13,7 @@ import numpy as np
 import tensorflow as tf
 from keras import layers, models, optimizers
 from sklearn.utils.class_weight import compute_class_weight
+import argparse
 
 CLASSES = [
     "*",
@@ -208,29 +209,31 @@ def setup_environment(cfg: TrainConfig) -> tf.distribute.Strategy:
 
 def build_and_restore_model(cfg: TrainConfig, strategy: tf.distribute.Strategy) -> Tuple[tf.keras.Model, tf.train.CheckpointManager, int]:
     """Constrói o modelo dentro do escopo da estratégia e restaura o checkpoint."""
+    checkpoint_dir_path = Path(cfg.checkpoint_dir)
+
     with strategy.scope():
         model = build_model(cfg.sequence_length, cfg.image_height, cfg.image_width, cfg.lstm_units)
+        optimizer = model.optimizer
+
+        checkpoint = tf.train.Checkpoint(optimizer=optimizer, model=model)
+        manager = tf.train.CheckpointManager(checkpoint, checkpoint_dir_path, max_to_keep=3)
+
+        start_epoch = 0
+        latest_ckpt = manager.latest_checkpoint
+        if latest_ckpt:
+            checkpoint.restore(latest_ckpt).expect_partial()
+            print(f"Restaurou checkpoint do ponto {latest_ckpt}")
+            prog_file = checkpoint_dir_path / "training_progress.json"
+            if prog_file.exists():
+                try:
+                    with open(prog_file, 'r') as f:
+                        progress = json.load(f)
+                    start_epoch = progress.get('epoch', 0) + 1
+                    print(f"Continuando da época {start_epoch}")
+                except Exception:
+                    start_epoch = 0
     
     model.summary()
-    optimizer = model.optimizer
-
-    checkpoint = tf.train.Checkpoint(optimizer=optimizer, model=model)
-    manager = tf.train.CheckpointManager(checkpoint, cfg.checkpoint_dir, max_to_keep=3)
-
-    start_epoch = 0
-    latest_ckpt = manager.latest_checkpoint
-    if latest_ckpt:
-        checkpoint.restore(latest_ckpt).expect_partial()
-        print(f"Restaurou checkpoint do ponto {latest_ckpt}")
-        prog_file = Path(cfg.checkpoint_dir) / "training_progress.json"
-        if prog_file.exists():
-            try:
-                with open(prog_file, 'r') as f:
-                    progress = json.load(f)
-                start_epoch = progress.get('epoch', 0) + 1
-                print(f"Continuando da época {start_epoch}")
-            except Exception:
-                start_epoch = 0
     
     return model, manager, start_epoch
 
@@ -500,27 +503,38 @@ def run_experiment(img_size: int, lstm_units: int):
     )
 
 def main():
-    """Função principal que coordena o pipeline de treinamento."""
-    
-    img_sizes = [32, 64, 128, 256]
-    lstm_units_list = [256, 512, 1024, 2048, 4096]
-    for lstm_units in lstm_units_list:
-        for img_size in img_sizes:
+    """
+    Função principal que recebe args da linha de comando e executa um experimento.
+    """
 
-            results_filename = f"best_model_results_{img_size}x{img_size}_{lstm_units}.txt"
-            results_file = Path(results_filename)
-            
-            # verifica se o arquivo de resultado já existe
-            if results_file.exists():
-                print(f"\n\nExperimento {img_size}x{img_size}, {lstm_units} LSTM já concluído. Pulando.")
-                continue
+    # 1. Configura o parser para ler os argumentos
+    parser = argparse.ArgumentParser(description="Executa um experimento LSTM.")
+    parser.add_argument("--img_size", type=int, required=True, 
+                        help="Tamanho da imagem (altura e largura)")
+    parser.add_argument("--lstm_units", type=int, required=True, 
+                        help="Número de unidades LSTM")
 
-            print(f"\n\nIniciando experimento com tamanho de imagem {img_size}x{img_size} e {lstm_units} unidades LSTM.\n")
-            try:
-                run_experiment(img_size, lstm_units)
-            except Exception as e:
-                print(f"Erro durante o experimento: {e}")
-    print("Todos os experimentos concluídos.")
+    args = parser.parse_args()
+
+    img_size = args.img_size
+    lstm_units = args.lstm_units
+
+    results_filename = f"best_model_results_{img_size}x{img_size}_{lstm_units}.txt"
+    results_file = Path(results_filename)
+
+    if results_file.exists():
+        print(f"\n\nExperimento {img_size}x{img_size}, {lstm_units} LSTM já concluído. Pulando.")
+        return
+
+    print(f"\n\nIniciando experimento com tamanho de imagem {img_size}x{img_size} e {lstm_units} unidades LSTM.\n")
+    try:
+        run_experiment(img_size, lstm_units)
+
+    except Exception as e:
+        print(f"Erro durante o experimento (Size: {img_size}, Units: {lstm_units}): {e}")
+        
+    print(f"Experimento (Size: {img_size}, Units: {lstm_units}) concluído.")
+
 
 if __name__ == "__main__":
     main()
