@@ -369,8 +369,8 @@ def create_callbacks(cfg: TrainConfig, manager: tf.train.CheckpointManager) -> L
     reduce_lr_callback = ReduceLROnPlateau(
         monitor='val_loss',
         factor=0.1,
-        patience=cfg.patience // 2,
-        min_lr=1e-6,
+        patience=cfg.patience,
+        min_lr=1e-7,
         verbose=1
     )
 
@@ -454,7 +454,7 @@ def main():
         image_height=32,
         image_width=32,
         lstm_units=256,
-        patience=20,
+        patience=5,
         seed=42,
         device="auto",
         checkpoint_dir=f"./checkpoints",
