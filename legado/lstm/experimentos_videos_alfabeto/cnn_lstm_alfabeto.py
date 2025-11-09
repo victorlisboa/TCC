@@ -7,13 +7,11 @@ import csv
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Dict, List, Tuple
-from keras.callbacks import ReduceLROnPlateau
 import matplotlib.pyplot as plt
 import numpy as np
 import tensorflow as tf
 from keras import layers, models, optimizers
 from sklearn.utils.class_weight import compute_class_weight
-import argparse
 
 CLASSES = [
     "*",
@@ -40,18 +38,51 @@ class TrainConfig:
     split_ratios: Tuple[float, float, float]
 
 def build_model(sequence_length: int, img_height: int, img_width: int, lstm_units: int) -> tf.keras.Sequential:
+    
+    # Definção CNN
+    cnn = models.Sequential([
+        layers.Input(shape=(img_height, img_width, 1)),
+        
+        layers.Conv2D(filters=32, kernel_size=(3, 3), padding='same'),
+        layers.BatchNormalization(),
+        layers.Activation('relu'),
+        layers.MaxPooling2D(pool_size=(2, 2)), # -> (128, 128, 32)
+        
+        layers.Conv2D(filters=64, kernel_size=(3, 3), padding='same'),
+        layers.BatchNormalization(),
+        layers.Activation('relu'),
+        layers.MaxPooling2D(pool_size=(2, 2)), # -> (64, 64, 64)
+
+        layers.Conv2D(filters=128, kernel_size=(3, 3), padding='same'),
+        layers.BatchNormalization(),
+        layers.Activation('relu'),
+        layers.MaxPooling2D(pool_size=(2, 2)), # -> (32, 32, 128)
+
+        layers.GlobalAveragePooling2D(),    # -> (128,)
+        
+        layers.Dense(1024, activation='relu'),
+
+    ], name="cnn_feature_extractor")
+
     model = models.Sequential()
     
     model.add(layers.TimeDistributed(
-        layers.Flatten(), 
+        cnn, 
         input_shape=(sequence_length, img_height, img_width, 1)
     ))
-
-    model.add(layers.LSTM(lstm_units, return_sequences=True))
-    model.add(layers.TimeDistributed(layers.Dense(NUM_CLASSES, activation="softmax")))
     
+    model.add(layers.LSTM(
+        lstm_units,
+        return_sequences=True,
+        dropout=0.3,
+    ))
+
+    model.add(layers.TimeDistributed(layers.Dropout(0.3)))
+    
+    model.add(layers.TimeDistributed(layers.Dense(NUM_CLASSES, activation="softmax")))
+
     model.compile(
-        optimizer=optimizers.Adam(1e-5),
+        optimizer=optimizers.Adam(learning_rate=1e-3),
         loss=tf.keras.losses.SparseCategoricalCrossentropy(),
         metrics=[tf.keras.metrics.SparseCategoricalAccuracy(name="acc")],
         weighted_metrics=[tf.keras.metrics.SparseCategoricalAccuracy(name="acc")],
@@ -169,10 +200,6 @@ def create_dataset(
 
     dataset = tf.data.Dataset.from_tensor_slices((all_paths, all_labels))
     
-    options = tf.data.Options()
-    options.experimental_distribute.auto_shard_policy = tf.data.experimental.AutoShardPolicy.DATA
-    dataset = dataset.with_options(options)
-
     if is_training:
         dataset = dataset.shuffle(buffer_size=len(metadata), seed=seed)
         dataset = dataset.repeat()
@@ -185,7 +212,7 @@ def create_dataset(
     )
     
     dataset = dataset.map(load_fn, num_parallel_calls=tf.data.AUTOTUNE)
-    dataset = dataset.batch(batch_size, drop_remainder=True)
+    dataset = dataset.batch(batch_size)
     dataset = dataset.prefetch(buffer_size=tf.data.AUTOTUNE)
     return dataset
 
@@ -209,37 +236,40 @@ def setup_environment(cfg: TrainConfig) -> tf.distribute.Strategy:
 
 def build_and_restore_model(cfg: TrainConfig, strategy: tf.distribute.Strategy) -> Tuple[tf.keras.Model, tf.train.CheckpointManager, int]:
     """Constrói o modelo dentro do escopo da estratégia e restaura o checkpoint."""
-    checkpoint_dir_path = Path(cfg.checkpoint_dir)
-
     with strategy.scope():
-        model = build_model(cfg.sequence_length, cfg.image_height, cfg.image_width, cfg.lstm_units)
-        optimizer = model.optimizer
-
-        checkpoint = tf.train.Checkpoint(optimizer=optimizer, model=model)
-        manager = tf.train.CheckpointManager(checkpoint, checkpoint_dir_path, max_to_keep=3)
-
-        start_epoch = 0
-        latest_ckpt = manager.latest_checkpoint
-        if latest_ckpt:
-            checkpoint.restore(latest_ckpt).expect_partial()
-            print(f"Restaurou checkpoint do ponto {latest_ckpt}")
-            prog_file = checkpoint_dir_path / "training_progress.json"
-            if prog_file.exists():
-                try:
-                    with open(prog_file, 'r') as f:
-                        progress = json.load(f)
-                    start_epoch = progress.get('epoch', 0) + 1
-                    print(f"Continuando da época {start_epoch}")
-                except Exception:
-                    start_epoch = 0
+        model = build_model(
+            cfg.sequence_length, 
+            cfg.image_height, 
+            cfg.image_width, 
+            cfg.lstm_units
+        )
     
     model.summary()
+    optimizer = model.optimizer
+
+    checkpoint = tf.train.Checkpoint(optimizer=optimizer, model=model)
+    manager = tf.train.CheckpointManager(checkpoint, cfg.checkpoint_dir, max_to_keep=3)
+
+    start_epoch = 0
+    latest_ckpt = manager.latest_checkpoint
+    if latest_ckpt:
+        checkpoint.restore(latest_ckpt).expect_partial()
+        print(f"Restaurou checkpoint do ponto {latest_ckpt}")
+        prog_file = Path(cfg.checkpoint_dir) / "training_progress.json"
+        if prog_file.exists():
+            try:
+                with open(prog_file, 'r') as f:
+                    progress = json.load(f)
+                start_epoch = progress.get('epoch', 0) + 1
+                print(f"Continuando da época {start_epoch}")
+            except Exception:
+                start_epoch = 0
     
     return model, manager, start_epoch
 
 def prepare_datasets(cfg: TrainConfig) -> Tuple[tf.data.Dataset, tf.data.Dataset, tf.data.Dataset, int, int, int, List, Dict]:
     """
-    Encapsula todo o pipeline de preparação de dados.
+    Encapsula todo o pipeline de preparação de dados (usando o pipeline do Código 1).
     Retorna os datasets de treino, validação e teste, além dos passos por época e pesos padrão.
     """
     
@@ -281,7 +311,7 @@ def prepare_datasets(cfg: TrainConfig) -> Tuple[tf.data.Dataset, tf.data.Dataset
     
     print("-" * 30)
     print(f"Divisão de Sequências:")
-    print(f"Sequências de Treino:    {len(train_sequences)}")
+    print(f"Sequências de Treino:     {len(train_sequences)}")
     print(f"Sequências de Validação: {len(val_sequences)}")
     print(f"Sequências de Teste:     {len(test_sequences)}")
     print("-" * 30)
@@ -331,8 +361,8 @@ def prepare_datasets(cfg: TrainConfig) -> Tuple[tf.data.Dataset, tf.data.Dataset
     
     # calcula steps
     steps_per_epoch = math.ceil(len(train_sequences) / cfg.batch_size)
-    validation_steps = len(val_sequences) // cfg.batch_size
-    test_steps = len(test_sequences) // cfg.batch_size
+    validation_steps = math.ceil(len(val_sequences) / cfg.batch_size)
+    test_steps = math.ceil(len(test_sequences) / cfg.batch_size)
     
     return (
         train_dataset, val_dataset, test_dataset, 
@@ -351,10 +381,6 @@ def create_callbacks(cfg: TrainConfig, manager: tf.train.CheckpointManager) -> L
                 json.dump({"epoch": epoch}, f)
             print(f"\nCheckpoint salvo: {path}")
 
-    # salva logs de treino
-    os.makedirs(cfg.checkpoint_dir, exist_ok=True)  # necessário criar diretório para CSVLogger
-    csv_logger_callback = tf.keras.callbacks.CSVLogger(filename=os.path.join(cfg.checkpoint_dir, "training_log.csv"))
-
     best_model_path = os.path.join(cfg.checkpoint_dir, f"best_model.h5")
     
     save_best_callback = tf.keras.callbacks.ModelCheckpoint(
@@ -372,17 +398,9 @@ def create_callbacks(cfg: TrainConfig, manager: tf.train.CheckpointManager) -> L
         restore_best_weights=True
     )
 
-    reduce_lr_callback = ReduceLROnPlateau(
-        monitor='val_loss',
-        factor=0.1,
-        patience=cfg.patience // 2,
-        min_lr=1e-6,
-        verbose=1
-    )
+    return [CheckpointCallback(), save_best_callback, early_stopping_callback]
 
-    return [CheckpointCallback(), save_best_callback, early_stopping_callback, csv_logger_callback]
-
-def plot_training_history(history, cfg):
+def plot_training_history(history):
     """Salva os gráficos de perda e acurácia do treinamento."""
     plt.figure(figsize=(12, 4))
     
@@ -403,10 +421,10 @@ def plot_training_history(history, cfg):
     plt.legend()
     
     plt.tight_layout()
-    plt.savefig(f'training_history_{cfg.image_height}x{cfg.image_width}_{cfg.lstm_units}.png')
+    plt.savefig('training_history.png') # salvar com nome certo
     plt.close()
-
-    print(f"Gráficos de treinamento salvos em 'training_history_{cfg.image_height}x{cfg.image_width}_{cfg.lstm_units}.png'")
+    
+    print("Gráficos de treinamento salvos em 'training_history.png'")
 
 def evaluate_and_save(
     model: tf.keras.Model, 
@@ -438,30 +456,36 @@ def evaluate_and_save(
     )
     best_model_results = best_model.evaluate(test_dataset_fresh, steps=test_steps, verbose=1)
     print(f"Resultados (Melhor Modelo): Loss={best_model_results[0]:.4f}, Accuracy={best_model_results[1]:.4f}")
-    with open(f"best_model_results_{cfg.image_height}x{cfg.image_width}_{cfg.lstm_units}.txt", "w") as f:
+    
+    results_filename = f"cnn_lstm_results_{cfg.image_height}x{cfg.image_width}_{cfg.lstm_units}.txt"
+    with open(results_filename, "w") as f:
+        f.write(f"Modelo: CNN+LSTM\n")
         f.write(f"Tamanho da Imagem: {cfg.image_height}x{cfg.image_width}\n")
         f.write(f"Número de Unidades LSTM: {cfg.lstm_units}\n")
         f.write(f"Loss: {best_model_results[0]:.4f}\n")
         f.write(f"Accuracy: {best_model_results[1]:.4f}\n")
+    print(f"Resultados salvos em {results_filename}")
 
     # Plotagem
-    plot_training_history(history, cfg)
+    plot_training_history(history)
 
-def run_experiment(img_size: int, lstm_units: int):
-    """Executa um experimento completo com os parâmetros fornecidos."""
+
+def main():
+    """Função principal que coordena o pipeline de treinamento."""
+    
     # 1. Configuração
     cfg = TrainConfig(
         data_dir=Path("/home/vitorlisboa/datasets/videos_alfabeto_cropped/breno"),
-        epochs=500,
+        epochs=1000,
         batch_size=2,
         sequence_length=32,
-        image_height=img_size,
-        image_width=img_size,
-        lstm_units=lstm_units,
+        image_height=256,
+        image_width=256,
+        lstm_units=512,
         patience=20,
         seed=42,
         device="auto",
-        checkpoint_dir=f"./checkpoints_{img_size}x{img_size}_{lstm_units}",
+        checkpoint_dir="./checkpoints_cnn_lstm",
         split_ratios=(0.6, 0.2, 0.2)
     )
 
@@ -501,39 +525,6 @@ def run_experiment(img_size: int, lstm_units: int):
         test_dataset, test_steps,
         test_sequences, default_class_weights, cfg
     )
-
-def main():
-    """
-    Função principal que recebe args da linha de comando e executa um experimento.
-    """
-
-    # 1. Configura o parser para ler os argumentos
-    parser = argparse.ArgumentParser(description="Executa um experimento LSTM.")
-    parser.add_argument("--img_size", type=int, required=True, 
-                        help="Tamanho da imagem (altura e largura)")
-    parser.add_argument("--lstm_units", type=int, required=True, 
-                        help="Número de unidades LSTM")
-
-    args = parser.parse_args()
-
-    img_size = args.img_size
-    lstm_units = args.lstm_units
-
-    results_filename = f"best_model_results_{img_size}x{img_size}_{lstm_units}.txt"
-    results_file = Path(results_filename)
-
-    if results_file.exists():
-        print(f"\n\nExperimento {img_size}x{img_size}, {lstm_units} LSTM já concluído. Pulando.")
-        return
-
-    print(f"\n\nIniciando experimento com tamanho de imagem {img_size}x{img_size} e {lstm_units} unidades LSTM.\n")
-    try:
-        run_experiment(img_size, lstm_units)
-
-    except Exception as e:
-        print(f"Erro durante o experimento (Size: {img_size}, Units: {lstm_units}): {e}")
-        
-    print(f"Experimento (Size: {img_size}, Units: {lstm_units}) concluído.")
 
 
 if __name__ == "__main__":

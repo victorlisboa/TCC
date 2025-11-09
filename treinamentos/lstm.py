@@ -6,14 +6,15 @@ import random
 import csv
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Dict, List, Tuple, Generator
-
-import cv2  # cv2 não é mais usado para carregar imagens, mas mantido por segurança
+from typing import Dict, List, Tuple
+from keras.callbacks import ReduceLROnPlateau
 import matplotlib.pyplot as plt
 import numpy as np
 import tensorflow as tf
 from keras import layers, models, optimizers
 from sklearn.utils.class_weight import compute_class_weight
+import argparse
+from sklearn.metrics import classification_report, confusion_matrix, ConfusionMatrixDisplay
 
 CLASSES = [
     "*",
@@ -42,27 +43,16 @@ class TrainConfig:
 def build_model(sequence_length: int, img_height: int, img_width: int, lstm_units: int) -> tf.keras.Sequential:
     model = models.Sequential()
     
-    # a entrada da rede passa de altura x largura para uma dimensão só
     model.add(layers.TimeDistributed(
         layers.Flatten(), 
         input_shape=(sequence_length, img_height, img_width, 1)
     ))
 
-    # camada densa processa vídeo
-    model.add(layers.TimeDistributed(
-        layers.Dense(256, activation="relu")
-    ))
-    model.add(layers.Dropout(0.3))
-
-    # camada de LSTM recebe saída da camada densa
-    model.add(layers.LSTM(lstm_units, return_sequences=True, recurrent_dropout=0.3))
-    model.add(layers.Dropout(0.5))
-    
-    # camada de classificação
+    model.add(layers.LSTM(lstm_units, return_sequences=True))
     model.add(layers.TimeDistributed(layers.Dense(NUM_CLASSES, activation="softmax")))
     
     model.compile(
-        optimizer=optimizers.Adam(1e-4),
+        optimizer=optimizers.Adam(1e-5),
         loss=tf.keras.losses.SparseCategoricalCrossentropy(),
         metrics=[tf.keras.metrics.SparseCategoricalAccuracy(name="acc")],
         weighted_metrics=[tf.keras.metrics.SparseCategoricalAccuracy(name="acc")],
@@ -180,6 +170,10 @@ def create_dataset(
 
     dataset = tf.data.Dataset.from_tensor_slices((all_paths, all_labels))
     
+    options = tf.data.Options()
+    options.experimental_distribute.auto_shard_policy = tf.data.experimental.AutoShardPolicy.DATA
+    dataset = dataset.with_options(options)
+
     if is_training:
         dataset = dataset.shuffle(buffer_size=len(metadata), seed=seed)
         dataset = dataset.repeat()
@@ -192,11 +186,9 @@ def create_dataset(
     )
     
     dataset = dataset.map(load_fn, num_parallel_calls=tf.data.AUTOTUNE)
-    dataset = dataset.batch(batch_size)
+    dataset = dataset.batch(batch_size, drop_remainder=True)
     dataset = dataset.prefetch(buffer_size=tf.data.AUTOTUNE)
     return dataset
-
-# --- Novas Funções Auxiliares (Modularização) ---
 
 def setup_environment(cfg: TrainConfig) -> tf.distribute.Strategy:
     """Configura seeds, GPUs e estratégia de distribuição."""
@@ -218,29 +210,31 @@ def setup_environment(cfg: TrainConfig) -> tf.distribute.Strategy:
 
 def build_and_restore_model(cfg: TrainConfig, strategy: tf.distribute.Strategy) -> Tuple[tf.keras.Model, tf.train.CheckpointManager, int]:
     """Constrói o modelo dentro do escopo da estratégia e restaura o checkpoint."""
+    checkpoint_dir_path = Path(cfg.checkpoint_dir)
+
     with strategy.scope():
         model = build_model(cfg.sequence_length, cfg.image_height, cfg.image_width, cfg.lstm_units)
+        optimizer = model.optimizer
+
+        checkpoint = tf.train.Checkpoint(optimizer=optimizer, model=model)
+        manager = tf.train.CheckpointManager(checkpoint, checkpoint_dir_path, max_to_keep=3)
+
+        start_epoch = 0
+        latest_ckpt = manager.latest_checkpoint
+        if latest_ckpt:
+            checkpoint.restore(latest_ckpt).expect_partial()
+            print(f"Restaurou checkpoint do ponto {latest_ckpt}")
+            prog_file = checkpoint_dir_path / "training_progress.json"
+            if prog_file.exists():
+                try:
+                    with open(prog_file, 'r') as f:
+                        progress = json.load(f)
+                    start_epoch = progress.get('epoch', 0) + 1
+                    print(f"Continuando da época {start_epoch}")
+                except Exception:
+                    start_epoch = 0
     
     model.summary()
-    optimizer = model.optimizer
-
-    checkpoint = tf.train.Checkpoint(optimizer=optimizer, model=model)
-    manager = tf.train.CheckpointManager(checkpoint, cfg.checkpoint_dir, max_to_keep=3)
-
-    start_epoch = 0
-    latest_ckpt = manager.latest_checkpoint
-    if latest_ckpt:
-        checkpoint.restore(latest_ckpt).expect_partial()
-        print(f"Restaurou checkpoint do ponto {latest_ckpt}")
-        prog_file = Path(cfg.checkpoint_dir) / "training_progress.json"
-        if prog_file.exists():
-            try:
-                with open(prog_file, 'r') as f:
-                    progress = json.load(f)
-                start_epoch = progress.get('epoch', 0) + 1
-                print(f"Continuando da época {start_epoch}")
-            except Exception:
-                start_epoch = 0
     
     return model, manager, start_epoch
 
@@ -250,11 +244,11 @@ def prepare_datasets(cfg: TrainConfig) -> Tuple[tf.data.Dataset, tf.data.Dataset
     Retorna os datasets de treino, validação e teste, além dos passos por época e pesos padrão.
     """
     
-    # 1. Obter metadados no nível do VÍDEO
+    # obtem metadados no nível do vídeo
     all_video_data = get_video_metadata(cfg.data_dir)
     num_videos = len(all_video_data)
 
-    # 2. Embaralhar e dividir no nível do VÍDEO
+    # embaralha e divide no nível do vídeo
     random.shuffle(all_video_data)
     train_split, val_split, test_split = cfg.split_ratios
     
@@ -277,7 +271,7 @@ def prepare_datasets(cfg: TrainConfig) -> Tuple[tf.data.Dataset, tf.data.Dataset
     if not train_data or not val_data or not test_data:
         raise ValueError("Divisão de dados (vídeos) resultou em um conjunto vazio.")
 
-    # 3. Criação de Sequências (Chunks)
+    # cria de sequências (chunks)
     print(f"Criando sequências (chunks) de {cfg.sequence_length} frames...")
     train_stride = cfg.sequence_length // 2 # gera sobreposição para dados de treino
     val_test_stride = cfg.sequence_length
@@ -296,7 +290,7 @@ def prepare_datasets(cfg: TrainConfig) -> Tuple[tf.data.Dataset, tf.data.Dataset
     if not train_sequences or not val_sequences or not test_sequences:
         raise ValueError("Criação de sequência resultou em um conjunto vazio.")
 
-    # 4. Cálculo de pesos (baseado apenas nos vídeos de TREINO)
+    # cálculo de pesos (baseado apenas nos vídeos de treino)
     print("Calculando pesos das classes (class weights)...")
     all_train_labels = []
     for _, labels in train_data:
@@ -316,7 +310,7 @@ def prepare_datasets(cfg: TrainConfig) -> Tuple[tf.data.Dataset, tf.data.Dataset
     
     default_class_weights = {i: 1.0 for i in class_indices}
 
-    # 5. Criar Datasets
+    # cria datasets
     train_dataset = create_dataset(
         train_sequences, cfg.batch_size, cfg.seed, 
         train_class_weights, cfg.sequence_length,
@@ -336,10 +330,10 @@ def prepare_datasets(cfg: TrainConfig) -> Tuple[tf.data.Dataset, tf.data.Dataset
         is_training=False
     )
     
-    # 6. Calcular Steps
+    # calcula steps
     steps_per_epoch = math.ceil(len(train_sequences) / cfg.batch_size)
-    validation_steps = math.ceil(len(val_sequences) / cfg.batch_size)
-    test_steps = math.ceil(len(test_sequences) / cfg.batch_size)
+    validation_steps = len(val_sequences) // cfg.batch_size
+    test_steps = len(test_sequences) // cfg.batch_size
     
     return (
         train_dataset, val_dataset, test_dataset, 
@@ -358,6 +352,10 @@ def create_callbacks(cfg: TrainConfig, manager: tf.train.CheckpointManager) -> L
                 json.dump({"epoch": epoch}, f)
             print(f"\nCheckpoint salvo: {path}")
 
+    # salva logs de treino
+    os.makedirs(cfg.checkpoint_dir, exist_ok=True)  # necessário criar diretório para CSVLogger
+    csv_logger_callback = tf.keras.callbacks.CSVLogger(filename=os.path.join(cfg.checkpoint_dir, "training_log.csv"))
+
     best_model_path = os.path.join(cfg.checkpoint_dir, f"best_model.h5")
     
     save_best_callback = tf.keras.callbacks.ModelCheckpoint(
@@ -375,7 +373,15 @@ def create_callbacks(cfg: TrainConfig, manager: tf.train.CheckpointManager) -> L
         restore_best_weights=True
     )
 
-    return [CheckpointCallback(), save_best_callback, early_stopping_callback]
+    reduce_lr_callback = ReduceLROnPlateau(
+        monitor='val_loss',
+        factor=0.1,
+        patience=cfg.patience // 2,
+        min_lr=1e-6,
+        verbose=1
+    )
+
+    return [CheckpointCallback(), save_best_callback, early_stopping_callback, csv_logger_callback]
 
 def plot_training_history(history, cfg):
     """Salva os gráficos de perda e acurácia do treinamento."""
@@ -404,61 +410,127 @@ def plot_training_history(history, cfg):
     print(f"Gráficos de treinamento salvos em 'training_history_{cfg.image_height}x{cfg.image_width}_{cfg.lstm_units}.png'")
 
 def evaluate_and_save(
-    model: tf.keras.Model, 
     history: tf.keras.callbacks.History, 
     best_model_path: str,
-    test_dataset: tf.data.Dataset, 
+    test_dataset: tf.data.Dataset, # Este argumento é ignorado em favor de test_sequences
     test_steps: int,
     test_sequences: List,
     default_class_weights: Dict,
     cfg: TrainConfig
 ):
-    """Avalia o melhor modelo, salva e plota os resultados."""
+    """
+    Avalia o melhor modelo, gera relatórios detalhados, salva e plota os resultados.
+    """
     print("\n" + "=" * 30)
     print("TREINAMENTO CONCLUÍDO")
     print("=" * 30 + "\n")
 
-    # Avaliação (melhor modelo)
+    # 1. Carregar o melhor modelo
     print(f"Carregando o melhor modelo salvo de: {best_model_path}")
     best_model = tf.keras.models.load_model(best_model_path)
 
-    print("Avaliando o melhor modelo (baseado em val_loss) no conjunto de teste...")
-
-    # Recria o dataset de teste para garantir que não foi consumido
-    test_dataset_fresh = create_dataset(
+    # 2. Criar o dataset de teste (para avaliação padrão)
+    print("Preparando dataset de teste para avaliação (Loss/Accuracy)...")
+    test_dataset = create_dataset(
         test_sequences, cfg.batch_size, cfg.seed, 
         default_class_weights, cfg.sequence_length, 
         cfg.image_height, cfg.image_width,
         is_training=False
     )
-    best_model_results = best_model.evaluate(test_dataset_fresh, steps=test_steps, verbose=1)
+
+    # 3. Avaliação padrão (Loss & Accuracy)
+    print("Avaliando o melhor modelo (baseado em val_loss) no conjunto de teste...")
+    best_model_results = best_model.evaluate(test_dataset, steps=test_steps, verbose=1)
+    
+    results_filename = f"best_model_results_{cfg.image_height}x{cfg.image_width}_{cfg.lstm_units}.txt"
     print(f"Resultados (Melhor Modelo): Loss={best_model_results[0]:.4f}, Accuracy={best_model_results[1]:.4f}")
-    with open(f"best_model_results_{cfg.image_height}x{cfg.image_width}_{cfg.lstm_units}.txt", "w") as f:
+    
+    with open(results_filename, "w") as f:
         f.write(f"Tamanho da Imagem: {cfg.image_height}x{cfg.image_width}\n")
         f.write(f"Número de Unidades LSTM: {cfg.lstm_units}\n")
         f.write(f"Loss: {best_model_results[0]:.4f}\n")
         f.write(f"Accuracy: {best_model_results[1]:.4f}\n")
+        f.write("\n" + "="*30 + "\n")
 
-    # Plotagem
+    # 4. Obter Predições para Relatório e Matriz de Confusão
+    print("Gerando predições para o relatório de classificação e matriz de confusão...")
+    
+    # Recriamos o dataset para garantir um novo iterador
+    pred_dataset = create_dataset(
+        test_sequences, cfg.batch_size, cfg.seed, 
+        default_class_weights, cfg.sequence_length, 
+        cfg.image_height, cfg.image_width,
+        is_training=False
+    )
+
+    all_true_labels = []
+    all_pred_labels = []
+
+    # Iteramos 'test_steps' para cobrir o conjunto de teste
+    for images, labels, _ in pred_dataset.take(test_steps):
+        predictions = best_model.predict(images, verbose=0)
+        # Obter o índice da classe com maior probabilidade
+        predicted_indices = np.argmax(predictions, axis=-1)
+        
+        # Achatar os lotes de sequências em listas simples de rótulos
+        all_true_labels.extend(labels.numpy().flatten())
+        all_pred_labels.extend(predicted_indices.flatten())
+
+    # 5. Gerar Relatório de Classificação
+    print("Gerando Relatório de Classificação...")
+    report = classification_report(
+        all_true_labels, 
+        all_pred_labels, 
+        labels=range(NUM_CLASSES), # Garante que todas as classes sejam incluídas
+        target_names=CLASSES,
+        zero_division=0
+    )
+    print(report)
+    
+    # Adicionar relatório ao arquivo de resultados
+    with open(results_filename, "a") as f:
+        f.write("Relatório de Classificação:\n")
+        f.write(report)
+
+    # 6. Gerar e Salvar Matriz de Confusão
+    print("Gerando Matriz de Confusão...")
+    cm = confusion_matrix(
+        all_true_labels, 
+        all_pred_labels, 
+        labels=range(NUM_CLASSES)
+    )
+    
+    # Plotar a matriz
+    fig, ax = plt.subplots(figsize=(18, 18))
+    display = ConfusionMatrixDisplay(confusion_matrix=cm, display_labels=CLASSES)
+    display.plot(ax=ax, xticks_rotation='vertical', cmap='viridis', values_format='d')
+    
+    plt.title('Matriz de Confusão')
+    plt.tight_layout()
+    cm_filename = f'confusion_matrix_{cfg.image_height}x{cfg.image_width}_{cfg.lstm_units}.png'
+    plt.savefig(cm_filename)
+    plt.close(fig)
+    print(f"Matriz de confusão salva em '{cm_filename}'")
+
+
+    # 7. Plotar Histórico de Treinamento (original)
     plot_training_history(history, cfg)
 
-
-def main():
-    """Função principal que coordena o pipeline de treinamento."""
-    
+def run_experiment(img_size: int, lstm_units: int):
+    """Executa um experimento completo com os parâmetros fornecidos."""
     # 1. Configuração
     cfg = TrainConfig(
         data_dir=Path("/home/vitorlisboa/datasets/videos_alfabeto_cropped/breno"),
         epochs=500,
         batch_size=2,
         sequence_length=32,
-        image_height=32,
-        image_width=32,
-        lstm_units=256,
-        patience=100,
+        image_height=img_size,
+        image_width=img_size,
+        lstm_units=lstm_units,
+        patience=20,
         seed=42,
         device="auto",
-        checkpoint_dir=f"./checkpoints_dense_32_256",
+        checkpoint_dir=f"./checkpoints_{img_size}x{img_size}_{lstm_units}",
         split_ratios=(0.6, 0.2, 0.2)
     )
 
@@ -493,11 +565,47 @@ def main():
 
     # 7. Avaliação e Salvamento
     evaluate_and_save(
-        model, history,
+        history,
         os.path.join(cfg.checkpoint_dir, "best_model.h5"),
         test_dataset, test_steps,
         test_sequences, default_class_weights, cfg
     )
+
+def main():
+    """
+    Função principal que recebe parametros de tamanho da imagem e unidades da LSTM e executa o experimento.
+    Args:
+        --img_size: Tamanho da imagem (altura e largura)
+        --lstm_units: Número de unidades LSTM
+    """
+
+    # 1. Configura o parser para ler os argumentos
+    parser = argparse.ArgumentParser(description="Executa um experimento LSTM.")
+    parser.add_argument("--img_size", type=int, required=True, 
+                        help="Tamanho da imagem (altura e largura)")
+    parser.add_argument("--lstm_units", type=int, required=True,
+                        help="Número de unidades LSTM")
+
+    args = parser.parse_args()
+
+    img_size = args.img_size
+    lstm_units = args.lstm_units
+
+    results_filename = f"best_model_results_{img_size}x{img_size}_{lstm_units}.txt"
+    results_file = Path(results_filename)
+
+    if results_file.exists():
+        print(f"\n\nExperimento {img_size}x{img_size}, {lstm_units} LSTM já concluído. Pulando.")
+        return
+
+    print(f"\n\nIniciando experimento com tamanho de imagem {img_size}x{img_size} e {lstm_units} unidades LSTM.\n")
+    try:
+        run_experiment(img_size, lstm_units)
+
+    except Exception as e:
+        print(f"Erro durante o experimento (Size: {img_size}, Units: {lstm_units}): {e}")
+        
+    print(f"Experimento (Size: {img_size}, Units: {lstm_units}) concluído.")
 
 
 if __name__ == "__main__":

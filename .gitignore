@@ -1,8 +1,10 @@
+.vscode/
+__pycache__/
+checkpoints/
 *.png
-.vscode
 *.keras
 *.csv
 *.pkl
 *.pt
-__pycache__
-.h5
+*.h5
+*.log
