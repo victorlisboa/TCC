@@ -38,7 +38,7 @@ class TrainConfig:
     patience: int
     seed: int
     device: str
-    checkpoint_dir_base: str
+    checkpoint_dir: str
 
 def build_model(sequence_length: int, img_height: int, img_width: int, lstm_units: int) -> tf.keras.Sequential:
     model = models.Sequential()
@@ -505,9 +505,8 @@ def evaluate_fold(
 
     print(f"Matriz de confusão salva em '{cm_filename}'")
 
+    return best_model_results, report_dict, np.array(all_true_labels), np.array(all_pred_labels), cm
 
-    # plota histórico de treinamento do fold
-    # plot_training_history(history, cfg)
 
 def save_final_results(
     all_fold_metrics: List[List[float]],
@@ -581,7 +580,7 @@ def main():
         patience=20,
         seed=42,
         device="auto",
-        checkpoint_dir_base=f"./checkpoints_lstm_kfold",
+        checkpoint_dir=f"./checkpoints_lstm_kfold",
     )
 
     # setup do ambiente
@@ -612,7 +611,7 @@ def main():
         print("="*50 + "\n")
 
         # cria um diretório de checkpoint específico para este fold
-        fold_checkpoint_dir = os.path.join(cfg.checkpoint_dir_base, f"fold_{fold_num}")
+        fold_checkpoint_dir = os.path.join(cfg.checkpoint_dir, f"fold_{fold_num}")
         os.makedirs(fold_checkpoint_dir, exist_ok=True)
         
         # Atualiza o cfg para este fold
@@ -672,7 +671,7 @@ def main():
         total_cm, 
         cfg.image_width, 
         cfg.lstm_units,
-        cfg.checkpoint_dir_base
+        cfg.checkpoint_dir
     )
 
 if __name__ == "__main__":
