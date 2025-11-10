@@ -43,24 +43,24 @@ def build_model(sequence_length: int, img_height: int, img_width: int, lstm_unit
     cnn = models.Sequential([
         layers.Input(shape=(img_height, img_width, 1)),
         
-        layers.Conv2D(filters=8, kernel_size=(3, 3), padding='same'),
-        layers.BatchNormalization(),
-        layers.Activation('relu'),
-        layers.MaxPooling2D(pool_size=(2, 2)),
-        
-        layers.Conv2D(filters=16, kernel_size=(3, 3), padding='same'),
-        layers.BatchNormalization(),
-        layers.Activation('relu'),
-        layers.MaxPooling2D(pool_size=(2, 2)),
-
         layers.Conv2D(filters=32, kernel_size=(3, 3), padding='same'),
         layers.BatchNormalization(),
         layers.Activation('relu'),
         layers.MaxPooling2D(pool_size=(2, 2)),
+        layers.SpatialDropout2D(0.2),
         
-        layers.GlobalAveragePooling2D(),
+        layers.Conv2D(filters=64, kernel_size=(3, 3), padding='same'),
+        layers.BatchNormalization(),
+        layers.Activation('relu'),
+        layers.MaxPooling2D(pool_size=(2, 2)),
+        layers.SpatialDropout2D(0.2),
+
+        layers.Conv2D(filters=128, kernel_size=(3, 3), padding='same'),
+        layers.BatchNormalization(),
+        layers.Activation('relu'),
+        layers.MaxPooling2D(pool_size=(2, 2)),
+        layers.SpatialDropout2D(0.2),
         
-        layers.Dense(256, activation='relu'),
     ], name="cnn_feature_extractor")
 
     model = models.Sequential()
@@ -69,6 +69,8 @@ def build_model(sequence_length: int, img_height: int, img_width: int, lstm_unit
         cnn, 
         input_shape=(sequence_length, img_height, img_width, 1)
     ))
+
+    model.add(layers.TimeDistributed(layers.Flatten()))
     
     model.add(layers.LSTM(
         lstm_units,
@@ -414,7 +416,7 @@ def create_callbacks(cfg: TrainConfig, manager: tf.train.CheckpointManager) -> L
         min_lr=1e-6
     )
 
-    return [CheckpointCallback(), save_best_callback, early_stopping_callback, csv_logger_callback]
+    return [CheckpointCallback(), save_best_callback, early_stopping_callback, csv_logger_callback, reduce_lr_callback]
 
 def plot_training_history(history):
     """Salva os gráficos de perda e acurácia do treinamento."""
@@ -487,9 +489,9 @@ def main():
         epochs=1000,
         batch_size=2,
         sequence_length=32,
-        image_height=32,
-        image_width=32,
-        lstm_units=128,
+        image_height=128,
+        image_width=128,
+        lstm_units=64,
         patience=20,
         seed=42,
         device="auto",
