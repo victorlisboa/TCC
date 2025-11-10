@@ -38,7 +38,7 @@ class TrainConfig:
     patience: int
     seed: int
     device: str
-    checkpoint_dir: str
+    checkpoint_dir_base: str
 
 def build_model(sequence_length: int, img_height: int, img_width: int, lstm_units: int) -> tf.keras.Sequential:
     model = models.Sequential()
