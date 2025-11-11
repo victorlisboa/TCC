@@ -6,7 +6,7 @@ IMG_SIZES=(32 64 128 256)
 LSTM_UNITS=(256 512 1024 2048 4096)
 
 # Caminho para seu script Python
-PYTHON_SCRIPT_PATH="/home/vitorlisboa/tcc/lstm/experimentos_videos_alfabeto/lstm_alfabeto.py"
+PYTHON_SCRIPT_PATH="/home/vitorlisboa/tcc/treinamentos/lstm.py"
 
 # Loop pelos parâmetros
 for units in "${LSTM_UNITS[@]}"; do
@@ -24,8 +24,6 @@ for units in "${LSTM_UNITS[@]}"; do
             echo "INICIANDO: Size: $size, Units: $units (Usando ambas as GPUs)"
             echo "========================================================================"
             
-            # Chama o script Python, passando os argumentos.
-            # O Python verá AMBAS as GPUs e usará MirroredStrategy.
             python3 "$PYTHON_SCRIPT_PATH" --img_size "$size" --lstm_units "$units"
         fi
     done
