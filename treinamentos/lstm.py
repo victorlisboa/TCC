@@ -10,6 +10,7 @@ from typing import Dict, List, Tuple
 from keras.callbacks import ReduceLROnPlateau
 import matplotlib.pyplot as plt
 import numpy as np
+import pandas as pd
 import tensorflow as tf
 from keras import layers, models, optimizers
 from sklearn.utils.class_weight import compute_class_weight
@@ -386,21 +387,29 @@ def create_callbacks(cfg: TrainConfig, manager: tf.train.CheckpointManager) -> L
 
     return [CheckpointCallback(), save_best_callback, early_stopping_callback, csv_logger_callback]
 
-def plot_training_history(history, cfg):
+def plot_training_history(cfg: TrainConfig):
     """Salva os gráficos de perda e acurácia do treinamento."""
+    
+    log_file = Path(cfg.checkpoint_dir) / "training_log.csv"
+    if not log_file.exists():
+        print(f"Aviso: Arquivo de log 'training_log.csv' não encontrado em {cfg.checkpoint_dir}. Pulando o plot do histórico.")
+        return
+
+    history = pd.read_csv(log_file)
+
     plt.figure(figsize=(12, 4))
     
     plt.subplot(1, 2, 1)
-    plt.plot(history.history['loss'], label='Treino')
-    plt.plot(history.history['val_loss'], label='Validação')
+    plt.plot(history['loss'], label='Treino')
+    plt.plot(history['val_loss'], label='Validação')
     plt.title('Modelo Loss')
     plt.xlabel('Época')
     plt.ylabel('Loss')
     plt.legend()
     
     plt.subplot(1, 2, 2)
-    plt.plot(history.history['acc'], label='Treino')
-    plt.plot(history.history['val_acc'], label='Validação')
+    plt.plot(history['weighted_acc'], label='Treino')
+    plt.plot(history['val_weighted_acc'], label='Validação')
     plt.title('Modelo Acurácia')
     plt.xlabel('Época')
     plt.ylabel('Acurácia')
@@ -412,10 +421,9 @@ def plot_training_history(history, cfg):
 
     print(f"Gráficos de treinamento salvos em 'training_history_{cfg.image_height}x{cfg.image_width}_{cfg.lstm_units}.png'")
 
+
 def evaluate_and_save(
-    history: tf.keras.callbacks.History, 
     best_model_path: str,
-    test_dataset: tf.data.Dataset,  # remover
     test_steps: int,
     test_sequences: List,
     default_class_weights: Dict,
@@ -515,20 +523,20 @@ def evaluate_and_save(
 
 
     # plota histórico de treinamento
-    plot_training_history(history, cfg)
+    plot_training_history(cfg)
 
 def run_experiment(img_size: int, lstm_units: int):
     """Executa um experimento completo com os parâmetros fornecidos."""
     # 1. Configuração
     cfg = TrainConfig(
         data_dir=Path("/home/vitorlisboa/datasets/videos_alfabeto_cropped/breno"),
-        epochs=500,
+        epochs=1000,
         batch_size=2,
         sequence_length=32,
         image_height=img_size,
         image_width=img_size,
         lstm_units=lstm_units,
-        patience=20,
+        patience=100,
         seed=42,
         device="auto",
         checkpoint_dir=f"./checkpoints_{img_size}x{img_size}_{lstm_units}",
@@ -566,7 +574,6 @@ def run_experiment(img_size: int, lstm_units: int):
 
     # 7. Avaliação e Salvamento
     evaluate_and_save(
-        history,
         os.path.join(cfg.checkpoint_dir, "best_model.h5"),
         test_dataset, test_steps,
         test_sequences, default_class_weights, cfg
@@ -592,12 +599,12 @@ def main():
     img_size = args.img_size
     lstm_units = args.lstm_units
 
-    results_filename = f"best_model_results_{img_size}x{img_size}_{lstm_units}.txt"
-    results_file = Path(results_filename)
+    # results_filename = f"best_model_results_{img_size}x{img_size}_{lstm_units}.txt"
+    # results_file = Path(results_filename)
 
-    if results_file.exists():
-        print(f"\n\nExperimento {img_size}x{img_size}, {lstm_units} LSTM já concluído. Pulando.")
-        return
+    # if results_file.exists():
+    #     print(f"\n\nExperimento {img_size}x{img_size}, {lstm_units} LSTM já concluído. Pulando.")
+    #     return
 
     print(f"\n\nIniciando experimento com tamanho de imagem {img_size}x{img_size} e {lstm_units} unidades LSTM.\n")
     try:
