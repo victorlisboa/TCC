@@ -575,8 +575,10 @@ def run_experiment(img_size: int, lstm_units: int):
     # 7. Avaliação e Salvamento
     evaluate_and_save(
         os.path.join(cfg.checkpoint_dir, "best_model.h5"),
-        test_dataset, test_steps,
-        test_sequences, default_class_weights, cfg
+        test_steps,
+        test_sequences,
+        default_class_weights,
+        cfg
     )
 
 def main():

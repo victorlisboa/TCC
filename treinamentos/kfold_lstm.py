@@ -534,8 +534,6 @@ def save_final_results(
     # salva o resultado final
     results_filename = Path(base_dir) / "best_model_results_kfold.txt"
     with open(results_filename, "w") as f:
-        f.write(f"Tamanho da Imagem: {img_size}x{img_size}\n")
-        f.write(f"Número de Unidades LSTM: {lstm_units}\n")
         f.write("\nResultados da Validação Cruzada\n")
         f.write(f"Loss Média:   {mean_loss:.4f} +/- {std_loss:.4f}\n")
         f.write(f"Acc Média:    {mean_acc:.4f} +/- {std_acc:.4f}\n")
