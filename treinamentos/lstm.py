@@ -539,7 +539,7 @@ def run_experiment(img_size: int, lstm_units: int):
         patience=100,
         seed=42,
         device="auto",
-        checkpoint_dir=f"./checkpoints_{img_size}x{img_size}_{lstm_units}",
+        checkpoint_dir=f"./checkpoints_lstm_experimentos/checkpoints_{img_size}x{img_size}_{lstm_units}",
         split_ratios=(0.6, 0.2, 0.2)
     )
 
