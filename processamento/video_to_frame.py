@@ -39,12 +39,11 @@ def derive_output_dir_from_video(video_path: Path) -> Path:
     return video_path.parent / base_name
 
 
-VIDEO_PATH_PLACEHOLDER = Path("/mnt/d/videos_alfabeto_cropped/breno/10.mp4")
+VIDEO_PATH = Path("/mnt/d/videos_alfabeto_cropped/breno/10.mp4")
 
 
 def main() -> None:
-    # Replace VIDEO_PATH_PLACEHOLDER with the actual absolute video path
-    video_path = VIDEO_PATH_PLACEHOLDER.expanduser().resolve()
+    video_path = VIDEO_PATH.expanduser().resolve()
     if not video_path.exists() or not video_path.is_file():
         raise FileNotFoundError(f"Video not found: {video_path}")
 

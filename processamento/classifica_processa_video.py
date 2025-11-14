@@ -6,9 +6,10 @@ import mediapipe as mp
 
 def process_and_label_video(input_video_path, output_video_path, output_csv_path, window_name="label & crop"):
     """
-    For each frame with detected hands, ask for a label, draw landmarks for guidance,
-    crop the first detected hand, convert to grayscale (3-ch), and write to output video.
-    Also saves a CSV with [frame_index, label] rows.
+    Pra cada frame com mãos detectadas, recebe uma label do teclado,
+    recorta a mão detectada, converte o vídeo para escala de cinza e
+    salva o vídeo. Além de criar um arquivo CSV com as frames rotuladas.
+    Estrutura do CSV: [frame_index, label].
     """
     cap = cv2.VideoCapture(str(input_video_path))
     if not cap.isOpened():
@@ -91,14 +92,14 @@ def process_and_label_video(input_video_path, output_video_path, output_csv_path
         writer.writerows(labeled_rows)
 
 def main():
-    # Base directory for videos
-    base_dir = Path("/mnt/d/videos_alfabeto")
     
-    # Create output directory if it doesn't exist
-    output_base_dir = Path("/mnt/d/videos_alfabeto_cropped")
+    pessoa = "pedro"
+    base_dir = Path(f"/mnt/d/videos_alfabeto/{pessoa}")
+    
+    output_base_dir = Path(f"/mnt/d/videos_alfabeto_cropped/{pessoa}")
     output_base_dir.mkdir(exist_ok=True)
     
-    # Process only MP4 videos in the directory and its subdirectories
+    # processa todos os .mp4 do diretorio
     for video_path in base_dir.rglob("*.mp4"):
         try:
             # Get the relative path from the base directory
@@ -108,7 +109,7 @@ def main():
             output_dir = output_base_dir / rel_path.parent
             output_dir.mkdir(parents=True, exist_ok=True)
             
-            # Output filenames (always mp4)
+            # Output filenames
             output_video_path = output_dir / f"{video_path.stem}.mp4"
             output_csv_path = output_dir / f"{video_path.stem}.csv"
             
