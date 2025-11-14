@@ -84,7 +84,7 @@ def build_model(sequence_length: int, img_height: int, img_width: int, lstm_unit
     model.add(layers.TimeDistributed(layers.Dense(NUM_CLASSES, activation="softmax")))
 
     model.compile(
-        optimizer=optimizers.Adam(learning_rate=1e-4),
+        optimizer=optimizers.Adam(learning_rate=1e-5),
         loss=tf.keras.losses.SparseCategoricalCrossentropy(),
         metrics=[tf.keras.metrics.SparseCategoricalAccuracy(name="acc")],
         weighted_metrics=[tf.keras.metrics.SparseCategoricalAccuracy(name="acc")],
@@ -417,7 +417,7 @@ def create_callbacks(cfg: TrainConfig, manager: tf.train.CheckpointManager) -> L
         min_lr=1e-6
     )
 
-    return [CheckpointCallback(), save_best_callback, early_stopping_callback, csv_logger_callback, reduce_lr_callback]
+    return [CheckpointCallback(), save_best_callback, early_stopping_callback, csv_logger_callback]
 
 def plot_training_history(history):
     """Salva os gráficos de perda e acurácia do treinamento."""
