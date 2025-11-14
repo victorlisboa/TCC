@@ -545,9 +545,6 @@ def main():
         --lstm_units: Número de unidades LSTM
     """
 
-    img_size = args.img_size
-    lstm_units = args.lstm_units
-
     # 1. Configura o parser para ler os argumentos
     parser = argparse.ArgumentParser(description="Executa um experimento CNN+LSTM.")
     parser.add_argument("--img_size", type=int, required=True, 
