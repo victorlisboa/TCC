@@ -494,8 +494,7 @@ def main():
 
     # 1. Configuração
     cfg = TrainConfig(
-        # data_dir=Path("/home/vitorlisboa/datasets/videos_alfabeto_cropped/breno"),
-        data_dir=Path("/mnt/d/videos_alfabeto_cropped/breno"),
+        data_dir=Path("/home/vitorlisboa/datasets/videos_alfabeto_cropped/breno"),
         epochs=1000,
         batch_size=2,
         sequence_length=32,
