@@ -12,6 +12,7 @@ import numpy as np
 import tensorflow as tf
 from keras import layers, models, optimizers
 from sklearn.utils.class_weight import compute_class_weight
+import argparse
 
 CLASSES = [
     "*",
@@ -482,16 +483,25 @@ def evaluate_and_save(
 
 def main():
     """Função principal que coordena o pipeline de treinamento."""
-    
+    # parse args for img size and lstm units (same logic as `lstm.py`)
+    parser = argparse.ArgumentParser(description="Executa um experimento CNN+LSTM.")
+    parser.add_argument("--img_size", type=int, required=True, help="Tamanho da imagem (altura e largura)")
+    parser.add_argument("--lstm_units", type=int, required=True, help="Número de unidades LSTM")
+    args = parser.parse_args()
+
+    img_size = args.img_size
+    lstm_units = args.lstm_units
+
     # 1. Configuração
     cfg = TrainConfig(
-        data_dir=Path("/home/vitorlisboa/datasets/videos_alfabeto_cropped/breno"),
+        # data_dir=Path("/home/vitorlisboa/datasets/videos_alfabeto_cropped/breno"),
+        data_dir=Path("/mnt/d/videos_alfabeto_cropped/breno"),
         epochs=1000,
         batch_size=2,
         sequence_length=32,
-        image_height=128,
-        image_width=128,
-        lstm_units=64,
+        image_height=img_size,
+        image_width=img_size,
+        lstm_units=lstm_units,
         patience=20,
         seed=42,
         device="auto",
