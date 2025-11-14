@@ -481,16 +481,8 @@ def evaluate_and_save(
     plot_training_history(history)
 
 
-def main():
+def run_experiment(img_size: int, lstm_units: int):
     """Função principal que coordena o pipeline de treinamento."""
-    # parse args for img size and lstm units (same logic as `lstm.py`)
-    parser = argparse.ArgumentParser(description="Executa um experimento CNN+LSTM.")
-    parser.add_argument("--img_size", type=int, required=True, help="Tamanho da imagem (altura e largura)")
-    parser.add_argument("--lstm_units", type=int, required=True, help="Número de unidades LSTM")
-    args = parser.parse_args()
-
-    img_size = args.img_size
-    lstm_units = args.lstm_units
 
     # 1. Configuração
     cfg = TrainConfig(
@@ -504,7 +496,7 @@ def main():
         patience=20,
         seed=42,
         device="auto",
-        checkpoint_dir="./checkpoints_cnn_lstm",
+        checkpoint_dir=f"./checkpoints_cnn_lstm_experimentos/checkpoints_{img_size}x{img_size}_{lstm_units}",
         split_ratios=(0.6, 0.2, 0.2)
     )
 
@@ -544,6 +536,38 @@ def main():
         test_dataset, test_steps,
         test_sequences, default_class_weights, cfg
     )
+
+def main():
+    """
+    Função principal que recebe parametros de tamanho da imagem e unidades da LSTM e executa o experimento.
+    Args:
+        --img_size: Tamanho da imagem (altura e largura)
+        --lstm_units: Número de unidades LSTM
+    """
+
+    img_size = args.img_size
+    lstm_units = args.lstm_units
+
+    # 1. Configura o parser para ler os argumentos
+    parser = argparse.ArgumentParser(description="Executa um experimento CNN+LSTM.")
+    parser.add_argument("--img_size", type=int, required=True, 
+                        help="Tamanho da imagem (altura e largura)")
+    parser.add_argument("--lstm_units", type=int, required=True,
+                        help="Número de unidades LSTM")
+
+    args = parser.parse_args()
+
+    img_size = args.img_size
+    lstm_units = args.lstm_units
+
+    print(f"\n\nIniciando experimento com tamanho de imagem {img_size}x{img_size} e {lstm_units} unidades LSTM.\n")
+    try:
+        run_experiment(img_size, lstm_units)
+
+    except Exception as e:
+        print(f"Erro durante o experimento (Size: {img_size}, Units: {lstm_units}): {e}")
+        
+    print(f"Experimento (Size: {img_size}, Units: {lstm_units}) concluído.")
 
 
 if __name__ == "__main__":

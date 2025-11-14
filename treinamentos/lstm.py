@@ -601,13 +601,6 @@ def main():
     img_size = args.img_size
     lstm_units = args.lstm_units
 
-    # results_filename = f"best_model_results_{img_size}x{img_size}_{lstm_units}.txt"
-    # results_file = Path(results_filename)
-
-    # if results_file.exists():
-    #     print(f"\n\nExperimento {img_size}x{img_size}, {lstm_units} LSTM já concluído. Pulando.")
-    #     return
-
     print(f"\n\nIniciando experimento com tamanho de imagem {img_size}x{img_size} e {lstm_units} unidades LSTM.\n")
     try:
         run_experiment(img_size, lstm_units)
