@@ -9,9 +9,11 @@ from pathlib import Path
 from typing import Dict, List, Tuple
 import matplotlib.pyplot as plt
 import numpy as np
+import pandas as pd
 import tensorflow as tf
 from keras import layers, models, optimizers
 from sklearn.utils.class_weight import compute_class_weight
+from sklearn.metrics import classification_report, confusion_matrix, ConfusionMatrixDisplay
 import argparse
 
 CLASSES = [
@@ -40,7 +42,7 @@ class TrainConfig:
 
 def build_model(sequence_length: int, img_height: int, img_width: int, lstm_units: int) -> tf.keras.Sequential:
     
-    # Definção CNN
+    # Definição CNN
     cnn = models.Sequential([
         layers.Input(shape=(img_height, img_width, 1)),
         
@@ -71,8 +73,10 @@ def build_model(sequence_length: int, img_height: int, img_width: int, lstm_unit
         input_shape=(sequence_length, img_height, img_width, 1)
     ))
 
-    model.add(layers.TimeDistributed(layers.Flatten()))
-    
+    model.add(layers.TimeDistributed(layers.GlobalAveragePooling2D()))
+    model.add(layers.TimeDistributed(layers.Dense(lstm_units, activation='relu')))  # o tamanho da dense é o mesmo da LSTM
+    model.add(layers.TimeDistributed(layers.Dropout(0.3)))
+
     model.add(layers.LSTM(
         lstm_units,
         return_sequences=True,
@@ -419,34 +423,41 @@ def create_callbacks(cfg: TrainConfig, manager: tf.train.CheckpointManager) -> L
 
     return [CheckpointCallback(), save_best_callback, early_stopping_callback, csv_logger_callback]
 
-def plot_training_history(history):
+def plot_training_history(cfg: TrainConfig):
     """Salva os gráficos de perda e acurácia do treinamento."""
+    
+    log_file = Path(cfg.checkpoint_dir) / "training_log.csv"
+    if not log_file.exists():
+        print(f"Aviso: Arquivo de log 'training_log.csv' não encontrado em {cfg.checkpoint_dir}. Pulando o plot do histórico.")
+        return
+
+    history = pd.read_csv(log_file)
+
     plt.figure(figsize=(12, 4))
     
     plt.subplot(1, 2, 1)
-    plt.plot(history.history['loss'], label='Treino')
-    plt.plot(history.history['val_loss'], label='Validação')
+    plt.plot(history['loss'], label='Treino')
+    plt.plot(history['val_loss'], label='Validação')
     plt.title('Modelo Loss')
     plt.xlabel('Época')
     plt.ylabel('Loss')
     plt.legend()
     
     plt.subplot(1, 2, 2)
-    plt.plot(history.history['acc'], label='Treino')
-    plt.plot(history.history['val_acc'], label='Validação')
+    plt.plot(history['weighted_acc'], label='Treino')
+    plt.plot(history['val_weighted_acc'], label='Validação')
     plt.title('Modelo Acurácia')
     plt.xlabel('Época')
     plt.ylabel('Acurácia')
     plt.legend()
     
     plt.tight_layout()
-    plt.savefig('training_history.png') # salvar com nome certo
+    plt.savefig(f'training_history_{cfg.image_height}x{cfg.image_width}_{cfg.lstm_units}.png')
     plt.close()
-    
-    print("Gráficos de treinamento salvos em 'training_history.png'")
+
+    print(f"Gráficos de treinamento salvos em 'training_history_{cfg.image_height}x{cfg.image_width}_{cfg.lstm_units}.png'")
 
 def evaluate_and_save(
-    history: tf.keras.callbacks.History, 
     best_model_path: str,
     test_dataset: tf.data.Dataset, 
     test_steps: int,
@@ -475,10 +486,67 @@ def evaluate_and_save(
         f.write(f"Número de Unidades LSTM: {cfg.lstm_units}\n")
         f.write(f"Loss: {best_model_results[0]:.4f}\n")
         f.write(f"Accuracy: {best_model_results[1]:.4f}\n")
-    print(f"Resultados salvos em {results_filename}")
+        f.write("\n" + "="*30 + "\n")
 
-    # Plotagem
-    plot_training_history(history)
+    print("Gerando predições para o relatório de classificação e matriz de confusão...")
+    
+    # Recriamos o dataset para garantir um novo iterador
+    pred_dataset = create_dataset(
+        test_sequences, cfg.batch_size, cfg.seed, 
+        default_class_weights, cfg.sequence_length, 
+        cfg.image_height, cfg.image_width,
+        is_training=False
+    )
+
+    all_true_labels = []
+    all_pred_labels = []
+
+    for images, labels, _ in pred_dataset.take(test_steps):
+        predictions = best_model.predict(images, verbose=0)
+        predicted_indices = np.argmax(predictions, axis=-1)
+        
+        all_true_labels.extend(labels.numpy().flatten())
+        all_pred_labels.extend(predicted_indices.flatten())
+
+    # relatório de classificação
+    print("Gerando Relatório de Classificação...")
+    report = classification_report(
+        all_true_labels, 
+        all_pred_labels, 
+        labels=range(NUM_CLASSES),
+        target_names=CLASSES,
+        zero_division=0
+    )
+    print(report)
+    
+    # adiciona relatorio ao arquivo de resultados
+    with open(results_filename, "a") as f:
+        f.write("Relatório de Classificação:\n")
+        f.write(report)
+
+    # gera e salva matriz de confusão
+    print("Gerando Matriz de Confusão...")
+    cm = confusion_matrix(
+        all_true_labels, 
+        all_pred_labels, 
+        labels=range(NUM_CLASSES)
+    )
+    
+    # plota a matriz
+    fig, ax = plt.subplots(figsize=(18, 18))
+    display = ConfusionMatrixDisplay(confusion_matrix=cm, display_labels=CLASSES)
+    display.plot(ax=ax, xticks_rotation='vertical', cmap='viridis', values_format='d')
+    
+    plt.title('Matriz de Confusão')
+    plt.tight_layout()
+    cm_filename = f'confusion_matrix_{cfg.image_height}x{cfg.image_width}_{cfg.lstm_units}.png'
+    plt.savefig(cm_filename)
+    plt.close(fig)
+    print(f"Matriz de confusão salva em '{cm_filename}'")
+
+
+    # plota histórico de treinamento
+    plot_training_history(cfg)
 
 
 def run_experiment(img_size: int, lstm_units: int):
@@ -531,7 +599,6 @@ def run_experiment(img_size: int, lstm_units: int):
 
     # 7. Avaliação e Salvamento
     evaluate_and_save(
-        history,
         os.path.join(cfg.checkpoint_dir, "best_model.h5"),
         test_dataset, test_steps,
         test_sequences, default_class_weights, cfg

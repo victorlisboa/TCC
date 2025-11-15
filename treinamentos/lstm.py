@@ -464,7 +464,6 @@ def evaluate_and_save(
         f.write(f"Accuracy: {best_model_results[1]:.4f}\n")
         f.write("\n" + "="*30 + "\n")
 
-    # 4. Obter Predições para Relatório e Matriz de Confusão
     print("Gerando predições para o relatório de classificação e matriz de confusão...")
     
     # Recriamos o dataset para garantir um novo iterador
