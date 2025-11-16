@@ -37,4 +37,3 @@ for tamanho in tamanhos:
         print(f"Ocorreu um erro inesperado: {e}")
 
 print(f"\nO menor val_loss foi com o tamanho {melhor_tamanho}: {menor_val_loss} na epoca {epoch}")
-print(pd.read_csv(Path(dir_base) / f'checkpoints_32x32_{melhor_tamanho}/training_log.csv').iloc[epoch-5:epoch+5])
