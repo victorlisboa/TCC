@@ -73,7 +73,8 @@ def build_model(sequence_length: int, img_height: int, img_width: int, lstm_unit
         input_shape=(sequence_length, img_height, img_width, 1)
     ))
 
-    model.add(layers.TimeDistributed(layers.GlobalAveragePooling2D()))
+    # model.add(layers.TimeDistributed(layers.GlobalAveragePooling2D()))
+    model.add(layers.TimeDistributed(layers.Flatten()))
     model.add(layers.TimeDistributed(layers.Dense(lstm_units, activation='relu')))  # o tamanho da dense é o mesmo da LSTM
     model.add(layers.TimeDistributed(layers.Dropout(0.3)))
 
@@ -100,12 +101,14 @@ def get_video_metadata(data_dir: Path) -> List[Tuple[List[str], List[int]]]:
        Retorna uma lista de tuplas (lista_de_caminhos_dos_frames, lista_de_labels) para cada vídeo.
     """
     all_video_data = []
-    video_dirs = sorted([d for d in data_dir.iterdir() if d.is_dir() and d.name.isdigit()])
+    # procura por diretórios cujo nome é um dígito em todo os subdiretórios de data_dir
+    video_dirs = sorted([d for d in data_dir.rglob('*') if d.is_dir() and d.name.isdigit()])
     print(f"Encontrou {len(video_dirs)} diretórios de vídeo.")
     
     for video_dir in video_dirs:
         video_id = video_dir.name
-        csv_file = data_dir / f"{video_id}.csv"
+        # assume que o csv está no mesmo diretório que os diretorios de cada vídeo
+        csv_file = video_dir.parent / f"{video_id}.csv"
         
         frame_labels_map = {}
         with open(csv_file, 'r') as f:
@@ -394,7 +397,10 @@ def create_callbacks(cfg: TrainConfig, manager: tf.train.CheckpointManager) -> L
 
     # salva logs de treino
     os.makedirs(cfg.checkpoint_dir, exist_ok=True)  # necessário criar diretório para CSVLogger
-    csv_logger_callback = tf.keras.callbacks.CSVLogger(filename=os.path.join(cfg.checkpoint_dir, "training_log.csv"))
+    csv_logger_callback = tf.keras.callbacks.CSVLogger(
+        filename=os.path.join(cfg.checkpoint_dir, "training_log.csv"),
+        append=True
+    )
 
     best_model_path = os.path.join(cfg.checkpoint_dir, f"best_model.h5")
     

@@ -38,10 +38,25 @@ def process_and_label_video(input_video_path, output_video_path, output_csv_path
         result = hands.process(img_rgb)
 
         if result.multi_hand_landmarks:
-            # Draw landmarks on a preview frame
+            # desenha landmarks da mão no preview
             preview = frame.copy()
             for hand_landmarks in result.multi_hand_landmarks:
                 mp_drawing.draw_landmarks(preview, hand_landmarks, mp_hands.HAND_CONNECTIONS)
+
+            # calcula bounding box da mão
+            hand_landmarks = result.multi_hand_landmarks[0]
+            h, w, _ = frame.shape
+            xs = [lm.x * w for lm in hand_landmarks.landmark]
+            ys = [lm.y * h for lm in hand_landmarks.landmark]
+            x_min, x_max = int(min(xs)), int(max(xs))
+            y_min, y_max = int(min(ys)), int(max(ys))
+            offset = 20
+            x_min = max(x_min - offset, 0)
+            y_min = max(y_min - offset, 0)
+            x_max = min(x_max + offset, w)
+            y_max = min(y_max + offset, h)
+
+            cv2.rectangle(preview, (x_min, y_min), (x_max, y_max), (0, 0, 255), 2)
 
             cv2.imshow(window_name, preview)
             print(f"\rFrame {frame_idx}: ", end="")
@@ -56,18 +71,6 @@ def process_and_label_video(input_video_path, output_video_path, output_csv_path
             labeled_rows.append([frame_idx, label])
             print(f"\rFrame {frame_idx}: {label}")
 
-            # Use only the first hand to keep 1 output frame per input frame
-            hand_landmarks = result.multi_hand_landmarks[0]
-            h, w, _ = frame.shape
-            xs = [lm.x * w for lm in hand_landmarks.landmark]
-            ys = [lm.y * h for lm in hand_landmarks.landmark]
-            x_min, x_max = int(min(xs)), int(max(xs))
-            y_min, y_max = int(min(ys)), int(max(ys))
-            offset = 20
-            x_min = max(x_min - offset, 0)
-            y_min = max(y_min - offset, 0)
-            x_max = min(x_max + offset, w)
-            y_max = min(y_max + offset, h)
             hand_crop = frame[y_min:y_max, x_min:x_max]
 
             if hand_crop.size > 0:
