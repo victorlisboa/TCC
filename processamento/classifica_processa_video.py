@@ -95,8 +95,7 @@ def process_and_label_video(input_video_path, output_video_path, output_csv_path
         writer.writerows(labeled_rows)
 
 def main():
-    
-    pessoa = "pedro"
+    pessoa = "fluente"
     base_dir = Path(f"/mnt/d/videos_alfabeto/{pessoa}")
     
     output_base_dir = Path(f"/mnt/d/videos_alfabeto_cropped/{pessoa}")

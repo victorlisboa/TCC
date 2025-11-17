@@ -3,10 +3,11 @@ import glob
 import matplotlib.pyplot as plt
 import os
 
-diretorio = f"/mnt/d/videos_alfabeto_cropped/breno"
-padrao_arquivos = os.path.join(diretorio, '*.csv')
+pessoa = ''
+diretorio = f"/mnt/d/videos_alfabeto_cropped/{pessoa}"
+padrao_arquivos = os.path.join(diretorio, '**', '*.csv')
 
-csv_files = glob.glob(padrao_arquivos)
+csv_files = glob.glob(padrao_arquivos, recursive=True)
 
 print(f"Arquivos CSV encontrados: {len(csv_files)}")
 
@@ -42,7 +43,7 @@ plt.grid(axis='y', linestyle='--', alpha=0.7)
 
 plt.tight_layout()
 
-output_filename = 'histograma_rotulos_breno.png'
+output_filename = f'histograma_rotulos_{pessoa}.png'
 plt.savefig(output_filename)
 
 print(f"\nGráfico salvo como: {output_filename}")

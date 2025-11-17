@@ -39,18 +39,20 @@ def derive_output_dir_from_video(video_path: Path) -> Path:
     return video_path.parent / base_name
 
 
-VIDEO_PATH = Path("/mnt/d/videos_alfabeto_cropped/breno/10.mp4")
+def main():
+    for i in range(1, 11):
+        VIDEO_PATH = Path(f"/mnt/d/videos_alfabeto_cropped/pedro/{i}.mp4")
+        video_path = VIDEO_PATH
+        if not video_path.exists() or not video_path.is_file():
+            raise FileNotFoundError(f"Video not found: {video_path}")
 
+        output_dir = derive_output_dir_from_video(video_path)
+        if output_dir.exists():
+            print(f'Diretório {output_dir} já existe. Pulando.')
+            continue
 
-def main() -> None:
-    video_path = VIDEO_PATH.expanduser().resolve()
-    if not video_path.exists() or not video_path.is_file():
-        raise FileNotFoundError(f"Video not found: {video_path}")
-
-    output_dir = derive_output_dir_from_video(video_path)
-
-    written = extract_frames(video_path=video_path, output_dir=output_dir, jpeg_quality=95)
-    print(f"Saved {written} frames to {output_dir}")
+        written = extract_frames(video_path=video_path, output_dir=output_dir, jpeg_quality=95)
+        print(f"Saved {written} frames to {output_dir}")
 
 
 if __name__ == "__main__":

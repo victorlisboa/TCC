@@ -421,7 +421,6 @@ def plot_training_history(cfg: TrainConfig):
 
     print(f"Gráficos de treinamento salvos em 'training_history_{cfg.image_height}x{cfg.image_width}_{cfg.lstm_units}.png'")
 
-
 def evaluate_and_save(
     best_model_path: str,
     test_steps: int,
