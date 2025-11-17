@@ -7,15 +7,16 @@ import csv
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Dict, List, Tuple
-from keras.callbacks import ReduceLROnPlateau
 import matplotlib.pyplot as plt
 import numpy as np
+import pandas as pd
 import tensorflow as tf
 from keras import layers, models, optimizers
 from sklearn.utils.class_weight import compute_class_weight
 import dataclasses
 from sklearn.metrics import classification_report, confusion_matrix, ConfusionMatrixDisplay
 from sklearn.model_selection import GroupKFold
+import argparse
 
 CLASSES = [
     "*",
@@ -41,18 +42,55 @@ class TrainConfig:
     checkpoint_dir: str
 
 def build_model(sequence_length: int, img_height: int, img_width: int, lstm_units: int) -> tf.keras.Sequential:
+    
+    # Definição CNN
+    cnn = models.Sequential([
+        layers.Input(shape=(img_height, img_width, 1)),
+        
+        layers.Conv2D(filters=32, kernel_size=(3, 3), padding='same'),
+        layers.BatchNormalization(),
+        layers.Activation('relu'),
+        layers.MaxPooling2D(pool_size=(2, 2)),
+        layers.SpatialDropout2D(0.2),
+        
+        layers.Conv2D(filters=64, kernel_size=(3, 3), padding='same'),
+        layers.BatchNormalization(),
+        layers.Activation('relu'),
+        layers.MaxPooling2D(pool_size=(2, 2)),
+        layers.SpatialDropout2D(0.2),
+
+        layers.Conv2D(filters=128, kernel_size=(3, 3), padding='same'),
+        layers.BatchNormalization(),
+        layers.Activation('relu'),
+        layers.MaxPooling2D(pool_size=(2, 2)),
+        layers.SpatialDropout2D(0.2),
+        
+    ], name="cnn_feature_extractor")
+
     model = models.Sequential()
     
     model.add(layers.TimeDistributed(
-        layers.Flatten(), 
+        cnn, 
         input_shape=(sequence_length, img_height, img_width, 1)
     ))
 
-    model.add(layers.LSTM(lstm_units, return_sequences=True))
-    model.add(layers.TimeDistributed(layers.Dense(NUM_CLASSES, activation="softmax")))
+    # model.add(layers.TimeDistributed(layers.GlobalAveragePooling2D()))
+    model.add(layers.TimeDistributed(layers.Flatten()))
+    model.add(layers.TimeDistributed(layers.Dense(lstm_units, activation='relu')))  # o tamanho da dense é o mesmo da LSTM
+    model.add(layers.TimeDistributed(layers.Dropout(0.3)))
+
+    model.add(layers.LSTM(
+        lstm_units,
+        return_sequences=True,
+        dropout=0.3,
+    ))
+
+    model.add(layers.TimeDistributed(layers.Dropout(0.3)))
     
+    model.add(layers.TimeDistributed(layers.Dense(NUM_CLASSES, activation="softmax")))
+
     model.compile(
-        optimizer=optimizers.Adam(1e-5),
+        optimizer=optimizers.Adam(learning_rate=1e-5),
         loss=tf.keras.losses.SparseCategoricalCrossentropy(),
         metrics=[tf.keras.metrics.SparseCategoricalAccuracy(name="acc")],
         weighted_metrics=[tf.keras.metrics.SparseCategoricalAccuracy(name="acc")],
@@ -64,12 +102,14 @@ def get_video_metadata(data_dir: Path) -> List[Tuple[List[str], List[int]]]:
        Retorna uma lista de tuplas (lista_de_caminhos_dos_frames, lista_de_labels) para cada vídeo.
     """
     all_video_data = []
-    video_dirs = sorted([d for d in data_dir.iterdir() if d.is_dir() and d.name.isdigit()])
+    # procura por diretórios cujo nome é um dígito em todo os subdiretórios de data_dir
+    video_dirs = sorted([d for d in data_dir.rglob('*') if d.is_dir() and d.name.isdigit()])
     print(f"Encontrou {len(video_dirs)} diretórios de vídeo.")
     
     for video_dir in video_dirs:
         video_id = video_dir.name
-        csv_file = data_dir / f"{video_id}.csv"
+        # assume que o csv está no mesmo diretório que os diretorios de cada vídeo
+        csv_file = video_dir.parent / f"{video_id}.csv"
         
         frame_labels_map = {}
         with open(csv_file, 'r') as f:
@@ -275,7 +315,7 @@ def prepare_fold_datasets(
         y=all_train_labels
     )
 
-    train_class_weights = {i: weight for i, weight in enumerate(class_weights_array)}    
+    train_class_weights = {i: weight for i, weight in enumerate(class_weights_array)}
     default_class_weights = {i: 1.0 for i in class_indices}
 
     # cria datasets
@@ -344,14 +384,15 @@ def create_callbacks(cfg: TrainConfig, manager: tf.train.CheckpointManager) -> L
 
     return [CheckpointCallback(), save_best_callback, early_stopping_callback, csv_logger_callback]
 
-def plot_training_history(history, cfg):
-    """Salva os gráficos de perda e acurácia do treinamento."""
+
+def plot_training_history(history, cfg: TrainConfig, fold_num: int):
+    """Salva os gráficos de perda e acurácia do treinamento para um fold."""
     plt.figure(figsize=(12, 4))
     
     plt.subplot(1, 2, 1)
     plt.plot(history.history['loss'], label='Treino')
     plt.plot(history.history['val_loss'], label='Validação')
-    plt.title('Modelo Loss')
+    plt.title(f'Fold {fold_num} - Modelo Loss')
     plt.xlabel('Época')
     plt.ylabel('Loss')
     plt.legend()
@@ -359,16 +400,19 @@ def plot_training_history(history, cfg):
     plt.subplot(1, 2, 2)
     plt.plot(history.history['acc'], label='Treino')
     plt.plot(history.history['val_acc'], label='Validação')
-    plt.title('Modelo Acurácia')
+    plt.title(f'Fold {fold_num} - Modelo Acurácia')
     plt.xlabel('Época')
     plt.ylabel('Acurácia')
     plt.legend()
     
     plt.tight_layout()
-    plt.savefig(f'training_history_{cfg.image_height}x{cfg.image_width}_{cfg.lstm_units}.png')
+    
+    plot_path = os.path.join(cfg.checkpoint_dir, f'fold_{fold_num}_training_history.png')
+    plt.savefig(plot_path)
     plt.close()
 
-    print(f"Gráficos de treinamento salvos em 'training_history_{cfg.image_height}x{cfg.image_width}_{cfg.lstm_units}.png'")
+    print(f"Gráficos de treinamento do Fold {fold_num} salvos em '{plot_path}'")
+
 
 def evaluate_fold(
     history: tf.keras.callbacks.History, 
@@ -380,8 +424,10 @@ def evaluate_fold(
     fold_num: int
 ) -> Tuple[List[float], Dict, np.ndarray, np.ndarray, np.ndarray]:
     """
-    Avalia o melhor modelo, gera relatórios detalhados, salva e plota os resultados.
-    """
+    Avalia o melhor modelo, gera relatórios detalhados, salva e plota os resultados."""
+    
+    # Plota o histórico de treinamento para este fold
+    plot_training_history(history, cfg, fold_num)
     
     print(f"\nAvaliação do FOLD {fold_num}")
 
@@ -479,6 +525,7 @@ def save_final_results(
     lstm_units: int,
     base_dir: str
 ):
+    """ Salva os resultados agregados de todos os folds."""
     print("\n" + "=" * 50)
     print("Validação Cruzada Concluída.")
     print("=" * 50 + "\n")
@@ -490,15 +537,16 @@ def save_final_results(
     std_acc = np.std(metrics_array[:, 1])
 
     print(f"Resultados dos {len(all_fold_metrics)} Folds:")
-    print(f"Loss Média:   {mean_loss:.4f} +/- {std_loss:.4f}")
-    print(f"Acc Média:    {mean_acc:.4f} +/- {std_acc:.4f}")
+    print(f"Loss Média:    {mean_loss:.4f} +/- {std_loss:.4f}")
+    print(f"Acc Média:     {mean_acc:.4f} +/- {std_acc:.4f}")
 
     # salva o resultado final
-    results_filename = Path(base_dir) / "best_model_results_kfold.txt"
+    results_filename = Path(base_dir) / f"kfold_results.txt"
     with open(results_filename, "w") as f:
         f.write("\nResultados da Validação Cruzada\n")
-        f.write(f"Loss Média:   {mean_loss:.4f} +/- {std_loss:.4f}\n")
-        f.write(f"Acc Média:    {mean_acc:.4f} +/- {std_acc:.4f}\n")
+        f.write(f"ImgSize: {img_size}, LSTM Units: {lstm_units}\n")
+        f.write(f"Loss Média:    {mean_loss:.4f} +/- {std_loss:.4f}\n")
+        f.write(f"Acc Média:     {mean_acc:.4f} +/- {std_acc:.4f}\n")
         f.write("\n" + "="*30 + "\n")
         
         report_str = classification_report(
@@ -517,28 +565,28 @@ def save_final_results(
     display.plot(ax=ax, xticks_rotation='vertical', cmap='viridis', values_format='d')
     plt.title('Matriz de Confusão Agregada')
     plt.tight_layout()
-    cm_filename = f'confusion_matrix_kfold.png'
+    cm_filename = Path(base_dir) / f'kfold_confusion_matrix.png'
     plt.savefig(cm_filename)
     plt.close(fig)
     print(f"Matriz de confusão agregada salva em '{cm_filename}'")
 
 
 def main():
-    '''K-Fold Cross-Validation para LSTM em vídeos do alfabeto de libras.'''
-
+    '''K-Fold Cross-Validation para CNN+LSTM em vídeos do alfabeto de libras.'''
+    
     # configuração k-fold
     cfg = TrainConfig(
         data_dir=Path("/home/vitorlisboa/datasets/videos_alfabeto_cropped/breno"),
         epochs=10000,
         batch_size=2,
         sequence_length=32,
-        image_height=32,
-        image_width=32,
-        lstm_units=2048,
+        image_height=64,
+        image_width=64,
+        lstm_units=512,
         patience=20,
         seed=42,
         device="auto",
-        checkpoint_dir=f"./checkpoints_lstm_kfold",
+        checkpoint_dir=f"./checkpoints_cnn_lstm_kfold",
     )
 
     # setup do ambiente
@@ -589,6 +637,7 @@ def main():
             test_sequences, default_class_weights
         ) = prepare_fold_datasets(fold_cfg, all_video_data, train_val_indices, test_indices)
 
+
         # criação dos callbacks
         callbacks = create_callbacks(fold_cfg, manager)
 
@@ -617,11 +666,10 @@ def main():
         all_true_labels_list.append(fold_true)
         all_pred_labels_list.append(fold_pred)
         total_cm += fold_cm
-    
+
     all_true_agg = np.concatenate(all_true_labels_list)
     all_pred_agg = np.concatenate(all_pred_labels_list)
         
-    # salva resultados finais agregados
     save_final_results(
         all_fold_metrics, 
         all_true_agg, 
