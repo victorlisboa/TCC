@@ -6,7 +6,7 @@ IMG_SIZES=(32 64 128 256)
 LSTM_UNITS=(256 512 1024 2048 4096)
 
 # Caminho para seu script Python
-PYTHON_SCRIPT_PATH="/home/vitorlisboa/tcc/treinamentos/lstm.py"
+PYTHON_SCRIPT_PATH="/home/vitorlisboa/tcc/treinamentos/cnn_lstm.py"
 
 # Loop pelos parâmetros
 for units in "${LSTM_UNITS[@]}"; do
