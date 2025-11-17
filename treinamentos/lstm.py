@@ -65,12 +65,12 @@ def get_video_metadata(data_dir: Path) -> List[Tuple[List[str], List[int]]]:
        Retorna uma lista de tuplas (lista_de_caminhos_dos_frames, lista_de_labels) para cada vídeo.
     """
     all_video_data = []
-    video_dirs = sorted([d for d in data_dir.iterdir() if d.is_dir() and d.name.isdigit()])
+    video_dirs = sorted([d for d in data_dir.rglob('*') if d.is_dir() and d.name.isdigit()])
     print(f"Encontrou {len(video_dirs)} diretórios de vídeo.")
     
     for video_dir in video_dirs:
         video_id = video_dir.name
-        csv_file = data_dir / f"{video_id}.csv"
+        csv_file = video_dir.parent / f"{video_id}.csv"
         
         frame_labels_map = {}
         with open(csv_file, 'r') as f:
