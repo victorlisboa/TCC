@@ -1,7 +1,7 @@
 import pandas as pd
 from pathlib import Path
 
-dir_base = '/mnt/d/resultados/cnn_experimentos_img_units_paciencia_20/checkpoints_cnn_lstm_experimentos/'
+dir_base = '/mnt/d/resultados/cnn_lstm/experimentos/paciencia_20/checkpoints'
 
 img_sizes = [32, 64, 128, 256]
 lstm_units = [32, 64, 128, 256, 512]
@@ -39,4 +39,4 @@ for lstm_unit in lstm_units:
         except Exception as e:
             print(f"Ocorreu um erro inesperado: {e}")
 
-print(f"\nO menor val_loss foi com a imagem tamanho {melhor_tamanho} e {melhor_unidade}: {menor_val_loss} na epoca {epoch}")
+print(f"\nO menor val_loss foi com a imagem tamanho {melhor_tamanho} e LSTM tamanho {melhor_unidade}: {menor_val_loss} na epoca {epoch}")
