@@ -4,7 +4,7 @@ from pathlib import Path
 dir_base = '/mnt/d/resultados/cnn_lstm/experimentos/paciencia_20/checkpoints'
 
 img_sizes = [32, 64, 128, 256]
-lstm_units = [32, 64, 128, 256, 512]
+lstm_units = [256, 512, 1024, 2048, 4096]
 menor_val_loss = float('inf')
 melhor_tamanho = None
 melhor_unidade = None
