@@ -13,9 +13,9 @@ for units in "${LSTM_UNITS[@]}"; do
     for size in "${IMG_SIZES[@]}"; do
         
         # Nome do arquivo de resultado para verificar se já existe
-        RESULTS_FILE="best_model_results_${size}x${size}_${units}.txt"
+        RESULTS_FILE="checkpoints_cnn_lstm_experimentos/checkpoints_${size}x${size}_${units}/"
         
-        if [ -f "$RESULTS_FILE" ]; then
+        if [ -d "$RESULTS_FILE" ]; then
             echo "---"
             echo "PULANDO: $RESULTS_FILE já existe. (Size: $size, Units: $units)"
             echo "---"
