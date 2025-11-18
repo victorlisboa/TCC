@@ -608,6 +608,8 @@ def main():
     all_pred_labels_list = []
     total_cm = np.zeros((NUM_CLASSES, NUM_CLASSES), dtype=int)
 
+    print(f"\n\nIniciando K-Fold com tamanho de imagem {cfg.img_size}x{cfg.img_size} e {cfg.lstm_units} unidades LSTM.\n")
+
     for fold, (train_val_indices, test_indices) in enumerate(group_kfold.split(video_indices, groups=video_indices)):
         fold_num = fold + 1
         print("\n" + "="*50)
