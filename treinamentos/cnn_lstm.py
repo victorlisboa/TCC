@@ -560,7 +560,7 @@ def run_experiment(img_size: int, lstm_units: int):
 
     # 1. Configuração
     cfg = TrainConfig(
-        data_dir=Path("/home/vitorlisboa/datasets/videos_alfabeto_cropped/pedro"),
+        data_dir=Path("/home/vitorlisboa/datasets/videos_alfabeto_cropped/fluente"),
         epochs=1000,
         batch_size=2,
         sequence_length=32,
