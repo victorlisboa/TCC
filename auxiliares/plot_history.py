@@ -2,13 +2,13 @@ import pandas as pd
 from pathlib import Path
 import matplotlib.pyplot as plt
 
-log_file = Path("/home/victor/desktop/unb/tcc/training_log.csv")
-output_file = f'training_history_32_2048.png'
+log_file = Path("/mnt/d/resultados/lstm/breno/experimentos/5K_epocas/checkpoints_32x32_2048/training_log.csv")
+output_file = f'/mnt/d/resultados/training_history_breno_250_epochs_32_2048.png'
 
 if not log_file.exists():
     print(f"Aviso: Arquivo de log 'training_log.csv' não encontrado. Pulando o plot do histórico.")
 
-history = pd.read_csv(log_file).iloc[:] # dá pra customizar pra pegar só uma parcela do treinamento
+history = pd.read_csv(log_file).iloc[:251] # dá pra customizar pra pegar só uma parcela do treinamento
 
 plt.figure(figsize=(12, 4))
 
