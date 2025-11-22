@@ -5,12 +5,13 @@ from pathlib import Path
 import numpy as np
 
 cnn = True
+pessoa = 'breno'
 arq = 'cnn_lstm' if cnn else 'lstm'
 subtitle = 'CNN+LSTM' if cnn else 'LSTM'
 
 img_size_list = [32, 64, 128, 256]
 lstm_unit_list = [256, 512, 1024, 2048, 4096]
-base_dir = f"/mnt/d/resultados/{arq}/experimentos/paciencia_20/checkpoints"
+base_dir = f"/mnt/d/resultados/{arq}/{pessoa}/experimentos/paciencia_20/checkpoints"
 
 """
 Gera heatmaps de acurácia e perda a partir de logs de experimentos,
@@ -81,9 +82,9 @@ plt.title('Acurácia Máxima de Validação')
 plt.suptitle(subtitle)
 plt.xlabel('Tamanho da Imagem')
 plt.ylabel('Unidades LSTM')
-plt.savefig(f'heatmap_acuracia_{arq}.png')
+plt.savefig(f'heatmap_acuracia_{arq}_{pessoa}.pdf')
 plt.close()
-print(f"Salvo: heatmap_acuracia_{arq}.png")
+print(f"Salvo: heatmap_acuracia_{arq}_{pessoa}.pdf")
 
 # Heatmap de Perda
 plt.figure(figsize=(12, 8))
@@ -99,6 +100,6 @@ plt.title('Perda Mínima de Validação')
 plt.suptitle(subtitle)
 plt.xlabel('Tamanho da Imagem')
 plt.ylabel('Unidades LSTM')
-plt.savefig(f'heatmap_perda_{arq}.png')
+plt.savefig(f'heatmap_perda_{arq}_{pessoa}.pdf')
 plt.close()
-print(f"Salvo: 'heatmap_perda_{arq}.png")
+print(f"Salvo: 'heatmap_perda_{arq}_{pessoa}.pdf")
