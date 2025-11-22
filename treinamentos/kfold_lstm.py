@@ -534,7 +534,7 @@ def main():
         sequence_length=32,
         image_height=32,
         image_width=32,
-        lstm_units=2048,
+        lstm_units=4096,
         patience=20,
         seed=42,
         device="auto",
