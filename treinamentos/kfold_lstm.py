@@ -365,10 +365,10 @@ def plot_training_history(history, cfg):
     plt.legend()
     
     plt.tight_layout()
-    plt.savefig(f'training_history_{cfg.image_height}x{cfg.image_width}_{cfg.lstm_units}.png')
+    plt.savefig(f'training_history_{cfg.image_height}x{cfg.image_width}_{cfg.lstm_units}.pdf')
     plt.close()
 
-    print(f"Gráficos de treinamento salvos em 'training_history_{cfg.image_height}x{cfg.image_width}_{cfg.lstm_units}.png'")
+    print(f"Gráficos de treinamento salvos em 'training_history_{cfg.image_height}x{cfg.image_width}_{cfg.lstm_units}.pdf'")
 
 def evaluate_fold(
     history: tf.keras.callbacks.History, 
@@ -461,7 +461,7 @@ def evaluate_fold(
     fig, ax = plt.subplots(figsize=(18, 18))
     display = ConfusionMatrixDisplay(confusion_matrix=cm, display_labels=CLASSES)
     display.plot(ax=ax, xticks_rotation='vertical', cmap='viridis', values_format='d')
-    cm_filename = os.path.join(cfg.checkpoint_dir, f'fold_{fold_num}_confusion_matrix.png')
+    cm_filename = os.path.join(cfg.checkpoint_dir, f'fold_{fold_num}_confusion_matrix.pdf')
     plt.savefig(cm_filename)
     plt.close(fig)
 
@@ -517,7 +517,7 @@ def save_final_results(
     display.plot(ax=ax, xticks_rotation='vertical', cmap='viridis', values_format='d')
     plt.title('Matriz de Confusão Agregada')
     plt.tight_layout()
-    cm_filename = f'confusion_matrix_kfold.png'
+    cm_filename = f'confusion_matrix_kfold.pdf'
     plt.savefig(cm_filename)
     plt.close(fig)
     print(f"Matriz de confusão agregada salva em '{cm_filename}'")
