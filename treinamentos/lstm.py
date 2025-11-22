@@ -538,7 +538,7 @@ def run_experiment(img_size: int, lstm_units: int):
         image_height=img_size,
         image_width=img_size,
         lstm_units=lstm_units,
-        patience=100,
+        patience=20,
         seed=42,
         device="auto",
         checkpoint_dir=f"./checkpoints_lstm_experimentos/checkpoints_{img_size}x{img_size}_{lstm_units}",
