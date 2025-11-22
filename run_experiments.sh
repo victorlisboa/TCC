@@ -6,14 +6,14 @@ IMG_SIZES=(32 64 128 256)
 LSTM_UNITS=(256 512 1024 2048 4096)
 
 # Caminho para seu script Python
-PYTHON_SCRIPT_PATH="/home/vitorlisboa/tcc/treinamentos/cnn_lstm.py"
+PYTHON_SCRIPT_PATH="/home/vitorlisboa/tcc/treinamentos/lstm.py"
 
 # Loop pelos parâmetros
 for units in "${LSTM_UNITS[@]}"; do
     for size in "${IMG_SIZES[@]}"; do
         
         # Nome do arquivo de resultado para verificar se já existe
-        RESULTS_FILE="checkpoints_cnn_lstm_experimentos/checkpoints_${size}x${size}_${units}/"
+        RESULTS_FILE="checkpoints_lstm_experimentos/checkpoints_${size}x${size}_${units}/"
         
         if [ -d "$RESULTS_FILE" ]; then
             echo "---"
