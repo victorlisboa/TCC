@@ -576,13 +576,13 @@ def main():
     
     # configuração k-fold
     cfg = TrainConfig(
-        data_dir=Path("/home/vitorlisboa/datasets/videos_alfabeto_cropped/pedro"),
+        data_dir=Path("/home/vitorlisboa/datasets/videos_alfabeto_cropped/fluente"),
         epochs=10000,
         batch_size=2,
         sequence_length=32,
-        image_height=128,
-        image_width=128,
-        lstm_units=256,
+        image_height=256,
+        image_width=256,
+        lstm_units=1024,
         patience=20,
         seed=42,
         device="auto",
