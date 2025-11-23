@@ -1,7 +1,7 @@
 import pandas as pd
 from pathlib import Path
 
-dir_base = '/mnt/d/resultados/cnn_lstm/pedro/experimentos/paciencia_20/checkpoints'
+dir_base = '/mnt/d/resultados/cnn_lstm/fluente/experimentos/paciencia_20/checkpoints'
 
 img_sizes = [32, 64, 128, 256]
 lstm_units = [256, 512, 1024, 2048, 4096]

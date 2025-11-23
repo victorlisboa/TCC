@@ -5,7 +5,7 @@ from pathlib import Path
 import numpy as np
 
 cnn = True
-pessoa = 'breno'
+pessoa = 'fluente'
 arq = 'cnn_lstm' if cnn else 'lstm'
 subtitle = 'CNN+LSTM' if cnn else 'LSTM'
 

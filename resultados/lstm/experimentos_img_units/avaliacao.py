@@ -411,10 +411,10 @@ def plot_training_history(history, cfg):
     plt.legend()
     
     plt.tight_layout()
-    plt.savefig(f'training_history_{cfg.image_height}x{cfg.image_width}_{cfg.lstm_units}.png')
+    plt.savefig(f'training_history_{cfg.image_height}x{cfg.image_width}_{cfg.lstm_units}.pdf')
     plt.close()
 
-    print(f"Gráficos de treinamento salvos em 'training_history_{cfg.image_height}x{cfg.image_width}_{cfg.lstm_units}.png'")
+    print(f"Gráficos de treinamento salvos em 'training_history_{cfg.image_height}x{cfg.image_width}_{cfg.lstm_units}.pdf'")
 
 def evaluate_and_save(
     # history: tf.keras.callbacks.History, 
@@ -505,7 +505,7 @@ def evaluate_and_save(
     
     plt.title('Matriz de Confusão')
     plt.tight_layout()
-    cm_filename = f'confusion_matrix_{cfg.image_height}x{cfg.image_width}_{cfg.lstm_units}.png'
+    cm_filename = f'confusion_matrix_{cfg.image_height}x{cfg.image_width}_{cfg.lstm_units}.pdf'
     plt.savefig(cm_filename)
     plt.close(fig)
     print(f"Matriz de confusão salva em '{cm_filename}'")

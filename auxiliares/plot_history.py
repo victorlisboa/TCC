@@ -3,7 +3,7 @@ from pathlib import Path
 import matplotlib.pyplot as plt
 
 log_file = Path("/mnt/d/resultados/lstm/breno/experimentos/5K_epocas/checkpoints_32x32_2048/training_log.csv")
-output_file = f'/mnt/d/resultados/training_history_breno_250_epochs_32_2048.png'
+output_file = f'/mnt/d/resultados/training_history_breno_250_epochs_32_2048.pdf'
 
 if not log_file.exists():
     print(f"Aviso: Arquivo de log 'training_log.csv' não encontrado. Pulando o plot do histórico.")

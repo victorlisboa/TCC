@@ -43,7 +43,7 @@ plt.grid(axis='y', linestyle='--', alpha=0.7)
 
 plt.tight_layout()
 
-output_filename = f'histograma_rotulos_{pessoa}.png'
+output_filename = f'histograma_rotulos_{pessoa}.pdf'
 plt.savefig(output_filename)
 
 print(f"\nGráfico salvo como: {output_filename}")
