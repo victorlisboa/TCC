@@ -344,14 +344,14 @@ def create_callbacks(cfg: TrainConfig, manager: tf.train.CheckpointManager) -> L
 
     return [CheckpointCallback(), save_best_callback, early_stopping_callback, csv_logger_callback]
 
-def plot_training_history(history, cfg):
+def plot_training_history(history, cfg, fold_num):
     """Salva os gráficos de perda e acurácia do treinamento."""
     plt.figure(figsize=(12, 4))
     
     plt.subplot(1, 2, 1)
     plt.plot(history.history['loss'], label='Treino')
     plt.plot(history.history['val_loss'], label='Validação')
-    plt.title('Modelo Loss')
+    plt.title(f'Fold {fold_num} - Modelo Loss')
     plt.xlabel('Época')
     plt.ylabel('Loss')
     plt.legend()
@@ -359,13 +359,14 @@ def plot_training_history(history, cfg):
     plt.subplot(1, 2, 2)
     plt.plot(history.history['acc'], label='Treino')
     plt.plot(history.history['val_acc'], label='Validação')
-    plt.title('Modelo Acurácia')
+    plt.title(f'Fold {fold_num} - Modelo Acurácia')
     plt.xlabel('Época')
     plt.ylabel('Acurácia')
     plt.legend()
     
     plt.tight_layout()
-    plt.savefig(f'training_history_{cfg.image_height}x{cfg.image_width}_{cfg.lstm_units}.pdf')
+    plot_path = os.path.join(cfg.checkpoint_dir, f'fold_{fold_num}_training_history.pdf')
+    plt.savefig(plot_path)
     plt.close()
 
     print(f"Gráficos de treinamento salvos em 'training_history_{cfg.image_height}x{cfg.image_width}_{cfg.lstm_units}.pdf'")
@@ -383,6 +384,9 @@ def evaluate_fold(
     Avalia o melhor modelo, gera relatórios detalhados, salva e plota os resultados.
     """
     
+    # Plota histórico de treinamento do fold
+    plot_training_history(history, cfg, fold_num)
+
     print(f"\nAvaliação do FOLD {fold_num}")
 
     # carrega o melhor modelo
