@@ -443,6 +443,7 @@ def evaluate_fold(
     if os.path.exists(npz_filename):
         print(f"\nCarregando dados processados do cache: {npz_filename}")
         data = np.load(npz_filename)
+        # Garante que é uma lista de floats simples [Loss, Acc]
         best_model_results = [float(data['loss']), float(data['acc'])]
         all_true_labels = data['true']
         all_pred_labels = data['pred']
@@ -462,7 +463,15 @@ def evaluate_fold(
             cfg.image_height, cfg.image_width,
             is_training=False
         )
-        best_model_results = best_model.evaluate(test_dataset, steps=test_steps, verbose=1)
+        
+        raw_results = best_model.evaluate(test_dataset, steps=test_steps, verbose=1)
+        
+        # pega apenas os dois primeiros (Loss e Acc).
+        if isinstance(raw_results, list) and len(raw_results) > 2:
+            best_model_results = [raw_results[0], raw_results[1]]
+        else:
+            best_model_results = raw_results
+            
         print(f"Resultados (Melhor Modelo): Loss={best_model_results[0]:.4f}, Accuracy={best_model_results[1]:.4f}")
 
         # Dataset de teste para predições
@@ -714,7 +723,7 @@ def main():
         # --- AVALIAÇÃO ---
         fold_metrics, _, fold_true, fold_pred, fold_cm = evaluate_fold(
             history,
-            os.path.join(fold_cfg.checkpoint_dir, "best_model.h5"),
+            model_path,
             test_steps,
             test_sequences, default_class_weights, fold_cfg, fold_num
         )
@@ -737,6 +746,8 @@ def main():
             cfg.lstm_units,
             cfg.checkpoint_dir
         )
+    else:
+        print("Nenhum dado processado. Verifique os diretórios.")
 
 if __name__ == "__main__":
     main()
