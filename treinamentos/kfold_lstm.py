@@ -346,6 +346,10 @@ def create_callbacks(cfg: TrainConfig, manager: tf.train.CheckpointManager) -> L
 
 def plot_training_history(history, cfg, fold_num):
     """Salva os gráficos de perda e acurácia do treinamento."""
+    # MODIFICAÇÃO: Se pulamos o treino, history é None, então não plotamos nada.
+    if history is None:
+        return
+
     plt.figure(figsize=(12, 4))
     
     plt.subplot(1, 2, 1)
@@ -369,7 +373,7 @@ def plot_training_history(history, cfg, fold_num):
     plt.savefig(plot_path)
     plt.close()
 
-    print(f"Gráficos de treinamento salvos em 'training_history_{cfg.image_height}x{cfg.image_width}_{cfg.lstm_units}.pdf'")
+    print(f"Gráficos de treinamento salvos em '{plot_path}'")
 
 def evaluate_fold(
     history: tf.keras.callbacks.History, 
@@ -380,64 +384,92 @@ def evaluate_fold(
     cfg: TrainConfig,
     fold_num: int
 ) -> Tuple[List[float], Dict, np.ndarray, np.ndarray, np.ndarray]:
-    """
-    Avalia o melhor modelo, gera relatórios detalhados, salva e plota os resultados.
-    """
     
-    # Plota histórico de treinamento do fold
+    # Tenta plotar histórico (se history não for None)
     plot_training_history(history, cfg, fold_num)
 
-    print(f"\nAvaliação do FOLD {fold_num}")
-
-    # carrega o melhor modelo
-    best_model = tf.keras.models.load_model(best_model_path)
-
-    # cria o dataset de teste
-    test_dataset = create_dataset(
-        test_sequences, cfg.batch_size, cfg.seed, 
-        default_class_weights, cfg.sequence_length, 
-        cfg.image_height, cfg.image_width,
-        is_training=False
-    )
-
-    # avalicação do melhor modelo
-    best_model_results = best_model.evaluate(test_dataset, steps=test_steps, verbose=1)
-    
     results_filename = os.path.join(cfg.checkpoint_dir, f"fold_{fold_num}_results.txt")
-    print(f"Resultados (Melhor Modelo): Loss={best_model_results[0]:.4f}, Accuracy={best_model_results[1]:.4f}")
+    npz_filename = os.path.join(cfg.checkpoint_dir, f"fold_{fold_num}_data.npz")
+    cm_filename = os.path.join(cfg.checkpoint_dir, f'fold_{fold_num}_confusion_matrix.pdf')
+
+    # Verifica se já temos os dados processados salvos
+    if os.path.exists(npz_filename):
+        print(f"\nCarregando dados processados do cache: {npz_filename}")
+        data = np.load(npz_filename)
+        best_model_results = [float(data['loss']), float(data['acc'])]
+        all_true_labels = data['true']
+        all_pred_labels = data['pred']
+        
+        # Se carregou do cache, precisamos recriar o results.txt apenas se ele não existir
+        # mas vamos prosseguir para garantir que a Matriz de Confusão seja retornada corretamente
+    else:
+        print(f"\nAvaliação do FOLD {fold_num} (Gerando novas predições)")
+        
+        # Carrega o modelo
+        if not os.path.exists(best_model_path):
+            raise FileNotFoundError(f"Modelo não encontrado em {best_model_path}")
+            
+        best_model = tf.keras.models.load_model(best_model_path)
+
+        # Cria dataset de teste
+        test_dataset = create_dataset(
+            test_sequences, cfg.batch_size, cfg.seed, 
+            default_class_weights, cfg.sequence_length, 
+            cfg.image_height, cfg.image_width,
+            is_training=False
+        )
+
+        # Avaliação (Loss e Acc)
+        best_model_results = best_model.evaluate(test_dataset, steps=test_steps, verbose=1)
+        print(f"Resultados: Loss={best_model_results[0]:.4f}, Accuracy={best_model_results[1]:.4f}")
+
+        # Predição (Label a Label)
+        all_true_labels = []
+        all_pred_labels = []
+
+        # Recria dataset para garantir iterador limpo
+        pred_dataset = create_dataset(
+            test_sequences, cfg.batch_size, cfg.seed, 
+            default_class_weights, cfg.sequence_length, 
+            cfg.image_height, cfg.image_width,
+            is_training=False
+        )
+
+        print("Gerando predições detalhadas...")
+        for images, labels, _ in pred_dataset.take(test_steps):
+            predictions = best_model.predict(images, verbose=0)
+            predicted_indices = np.argmax(predictions, axis=-1)
+            
+            all_true_labels.extend(labels.numpy().flatten())
+            all_pred_labels.extend(predicted_indices.flatten())
+        
+        all_true_labels = np.array(all_true_labels)
+        all_pred_labels = np.array(all_pred_labels)
+
+        np.savez(
+            npz_filename, 
+            loss=best_model_results[0], 
+            acc=best_model_results[1], 
+            true=all_true_labels, 
+            pred=all_pred_labels
+        )
+        print(f"Cache salvo em: {npz_filename}")
     
+    # Salva txt se não existir ou reescreve
     with open(results_filename, "w") as f:
         f.write(f"Fold: {fold_num}\n")
         f.write(f"Loss: {best_model_results[0]:.4f}\n")
         f.write(f"Accuracy: {best_model_results[1]:.4f}\n")
         f.write("\n" + "="*30 + "\n")
 
-    all_true_labels = []
-    all_pred_labels = []
-
-    # Recriamos o dataset para garantir um novo iterador
-    pred_dataset = create_dataset(
-        test_sequences, cfg.batch_size, cfg.seed, 
-        default_class_weights, cfg.sequence_length, 
-        cfg.image_height, cfg.image_width,
-        is_training=False
-    )
-
-    for images, labels, _ in pred_dataset.take(test_steps):
-        predictions = best_model.predict(images, verbose=0)
-        predicted_indices = np.argmax(predictions, axis=-1)
-        
-        all_true_labels.extend(labels.numpy().flatten())
-        all_pred_labels.extend(predicted_indices.flatten())
-
-    # gera relatório de classificação
+    # Relatório do Scikit-learn
     report_dict = classification_report(
         all_true_labels, 
         all_pred_labels, 
         labels=range(NUM_CLASSES), 
         target_names=CLASSES,
         zero_division=0,
-        output_dict=True  # Retorna um dicionário!
+        output_dict=True
     )
     report_str = classification_report(
         all_true_labels, 
@@ -448,12 +480,11 @@ def evaluate_fold(
     )
     print(report_str)
     
-    # Adicionar relatório ao arquivo de resultados
     with open(results_filename, "a") as f:
         f.write("Relatório de Classificação:\n")
         f.write(report_str)
 
-    # 6. gera e salva matriz de confusão
+    # Matriz de Confusão
     print("Gerando Matriz de Confusão...")
     cm = confusion_matrix(
         all_true_labels, 
@@ -461,17 +492,16 @@ def evaluate_fold(
         labels=range(NUM_CLASSES)
     )
     
-    # plotar a matriz de confusão
-    fig, ax = plt.subplots(figsize=(18, 18))
-    display = ConfusionMatrixDisplay(confusion_matrix=cm, display_labels=CLASSES)
-    display.plot(ax=ax, xticks_rotation='vertical', cmap='viridis', values_format='d')
-    cm_filename = os.path.join(cfg.checkpoint_dir, f'fold_{fold_num}_confusion_matrix.pdf')
-    plt.savefig(cm_filename)
-    plt.close(fig)
+    # Plota apenas se não existir ou se acabamos de rodar a predição
+    if not os.path.exists(cm_filename) or not os.path.exists(npz_filename):
+        fig, ax = plt.subplots(figsize=(18, 18))
+        display = ConfusionMatrixDisplay(confusion_matrix=cm, display_labels=CLASSES)
+        display.plot(ax=ax, xticks_rotation='vertical', cmap='viridis', values_format='d')
+        plt.savefig(cm_filename)
+        plt.close(fig)
+        print(f"Matriz de confusão salva em '{cm_filename}'")
 
-    print(f"Matriz de confusão salva em '{cm_filename}'")
-
-    return best_model_results, report_dict, np.array(all_true_labels), np.array(all_pred_labels), cm
+    return best_model_results, report_dict, all_true_labels, all_pred_labels, cm
 
 
 def save_final_results(
@@ -528,7 +558,7 @@ def save_final_results(
 
 
 def main():
-    '''K-Fold Cross-Validation para LSTM em vídeos do alfabeto de libras.'''
+    '''K-Fold Cross-Validation para LSTM com retomada inteligente.'''
 
     # configuração k-fold
     cfg = TrainConfig(
@@ -554,9 +584,6 @@ def main():
     print(f"Total de vídeos coletados: {num_videos}")
 
     video_indices = np.arange(num_videos)
-
-    # deixa sempre 1 vídeo para teste
-    # e os outros para treino/validação
     group_kfold = GroupKFold(n_splits=num_videos)
 
     all_fold_metrics = []
@@ -567,52 +594,83 @@ def main():
     for fold, (train_val_indices, test_indices) in enumerate(group_kfold.split(video_indices, groups=video_indices)):
         fold_num = fold + 1
         print("\n" + "="*50)
-        print(f"--- Iniciando fold {fold_num} / {num_videos} ---")
-        print(f"Índice de vídeo de teste: {test_indices[0]}")
-        print(f"Índices de vídeo de treino/val: {train_val_indices}")
-        print("="*50 + "\n")
-
-        # cria um diretório de checkpoint específico para este fold
+        print(f"--- Processando fold {fold_num} / {num_videos} ---")
+        
+        # Setup de diretórios para este fold
         fold_checkpoint_dir = os.path.join(cfg.checkpoint_dir, f"fold_{fold_num}")
         os.makedirs(fold_checkpoint_dir, exist_ok=True)
-        
-        # Atualiza o cfg para este fold
         fold_cfg = dataclasses.replace(cfg, checkpoint_dir=fold_checkpoint_dir)
 
-        # construção do modelo
+        # Caminhos chaves para verificação
+        npz_filename = os.path.join(fold_checkpoint_dir, f"fold_{fold_num}_data.npz")
+        model_path = os.path.join(fold_checkpoint_dir, "best_model.h5")
+
+        # --- LÓGICA DE RETOMADA (RESUME) ---
+        skip_training = False
+        
+        # Caso 1: Fold totalmente concluído e cacheado (mais rápido)
+        if os.path.exists(npz_filename):
+            print(f"Fold {fold_num} já finalizado (cache encontrado). Carregando dados...")
+            data = np.load(npz_filename)
+            
+            # Carrega dados para estatística global
+            all_fold_metrics.append([float(data['loss']), float(data['acc'])])
+            
+            f_true = data['true']
+            f_pred = data['pred']
+            all_true_labels_list.append(f_true)
+            all_pred_labels_list.append(f_pred)
+            total_cm += confusion_matrix(f_true, f_pred, labels=range(NUM_CLASSES))
+            
+            continue # Pula TUDO e vai para o próximo fold
+            
+        # Caso 2: Treino finalizado (tem modelo), mas falta gerar estatísticas/cache
+        elif os.path.exists(model_path):
+            print(f"Fold {fold_num} possui modelo treinado. Pulando treinamento e indo para avaliação...")
+            skip_training = True
+            
+        # Caso 3: Nada encontrado, treinar do zero
+        else:
+            print(f"Iniciando treinamento do zero para Fold {fold_num}...")
+            skip_training = False
+            
+        # --- PREPARAÇÃO ---
+        print(f"Índice de vídeo de teste: {test_indices[0]}")
+
         with strategy.scope():
             model = build_model(fold_cfg.sequence_length, fold_cfg.image_height, fold_cfg.image_width, fold_cfg.lstm_units)
             optimizer = model.optimizer
             checkpoint = tf.train.Checkpoint(optimizer=optimizer, model=model)
             manager = tf.train.CheckpointManager(checkpoint, Path(fold_cfg.checkpoint_dir), max_to_keep=3)
 
-        # preparação dos datasets
         (
             train_dataset, val_dataset, test_dataset, 
             steps_per_epoch, validation_steps, test_steps,
             test_sequences, default_class_weights
         ) = prepare_fold_datasets(fold_cfg, all_video_data, train_val_indices, test_indices)
 
-        # criação dos callbacks
         callbacks = create_callbacks(fold_cfg, manager)
 
-        # treinamento
-        print(f"\nIniciando treinamento do fold {fold_num}...")
-        history = model.fit(
-            train_dataset,
-            epochs=fold_cfg.epochs,
-            initial_epoch=0,
-            steps_per_epoch=steps_per_epoch,
-            validation_data=val_dataset,
-            validation_steps=validation_steps,
-            callbacks=callbacks,
-            verbose=1,
-        )
+        # --- TREINAMENTO (Condicional) ---
+        if not skip_training:
+            print(f"\nTreinando fold {fold_num}...")
+            history = model.fit(
+                train_dataset,
+                epochs=fold_cfg.epochs,
+                initial_epoch=0,
+                steps_per_epoch=steps_per_epoch,
+                validation_data=val_dataset,
+                validation_steps=validation_steps,
+                callbacks=callbacks,
+                verbose=1,
+            )
+        else:
+            history = None # Sem histórico pois pulamos o fit
 
-        # avaliacao do fold
+        # --- AVALIAÇÃO ---
         fold_metrics, _, fold_true, fold_pred, fold_cm = evaluate_fold(
             history,
-            os.path.join(fold_cfg.checkpoint_dir, "best_model.h5"),
+            model_path,
             test_steps,
             test_sequences, default_class_weights, fold_cfg, fold_num
         )
@@ -622,19 +680,21 @@ def main():
         all_pred_labels_list.append(fold_pred)
         total_cm += fold_cm
     
-    all_true_agg = np.concatenate(all_true_labels_list)
-    all_pred_agg = np.concatenate(all_pred_labels_list)
-        
-    # salva resultados finais agregados
-    save_final_results(
-        all_fold_metrics, 
-        all_true_agg, 
-        all_pred_agg,
-        total_cm, 
-        cfg.image_width, 
-        cfg.lstm_units,
-        cfg.checkpoint_dir
-    )
+    if all_true_labels_list:
+        all_true_agg = np.concatenate(all_true_labels_list)
+        all_pred_agg = np.concatenate(all_pred_labels_list)
+            
+        save_final_results(
+            all_fold_metrics, 
+            all_true_agg, 
+            all_pred_agg,
+            total_cm, 
+            cfg.image_width, 
+            cfg.lstm_units,
+            cfg.checkpoint_dir
+        )
+    else:
+        print("Nenhum dado processado. Verifique os diretórios.")
 
 if __name__ == "__main__":
     main()
